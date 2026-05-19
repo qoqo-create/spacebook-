@@ -78,7 +78,7 @@ const toRow=b=>({
   id:b.id, name:b.name, date:b.date,
   start_time:b.startTime, end_time:b.endTime,
   hours:b.hours, platform:b.platform, plan:b.plan,
-  option_amount:b.option||0, discount_rate:b.discountRate||0, ...(b.discountAmt>0?{discount_amount:b.discountAmt}:{}),
+  option_amount:b.option||0, discount_rate:b.discountRate||0, ...(b.discountAmt>0?{discount_amount:b.discountAmt}:{}), custom_price:b.customPrice||0,
   promo_link:b.promoLink||false, tax_included:b.taxIncluded||false,
   custom_fee:b.customFee??null, pi:b.pi||0,
 });
@@ -86,7 +86,7 @@ const fromRow=r=>({
   id:r.id, name:r.name, date:r.date,
   startTime:r.start_time, endTime:r.end_time,
   hours:Number(r.hours), platform:r.platform, plan:r.plan,
-  option:Number(r.option_amount)||0, discountRate:Number(r.discount_rate)||0, discountAmt:Number(r.discount_amount)||0,
+  option:Number(r.option_amount)||0, discountRate:Number(r.discount_rate)||0, discountAmt:Number(r.discount_amount)||0, customPrice:Number(r.custom_price)||0,
   promoLink:r.promo_link||false, taxIncluded:r.tax_included||false,
   customFee:r.custom_fee!=null?Number(r.custom_fee):null, pi:r.pi||0,
 });
@@ -127,7 +127,9 @@ const man=n=>{const v=Math.round(n);return v>=10000?(v/10000).toFixed(1)+'万':v
 // ── 計算
 function calcB(b,cf=null){
   const pl=PL[b.plan]||PL.basic;const pf=PF[b.platform];
-  const base=pl.hrs?(pl.pph||0)*pl.hrs:pl.pph?pl.pph*(b.hours||1):(pl.fp||0);
+  // カスタムプランの場合、booking自体に保存されたcustomPriceを使う
+  const baseFp=b.plan==='custom'&&b.customPrice?b.customPrice:(pl.fp||0);
+  const base=pl.hrs?(pl.pph||0)*pl.hrs:pl.pph?pl.pph*(b.hours||1):baseFp;
   const mf=pf?.mf??0;const dr=b.discountRate||0;const disc=Math.round(base*dr/100);
   const taxIncluded=b.taxIncluded||false;
   const dAmt=b.discountAmt||0;
@@ -457,7 +459,7 @@ function Add({onCancel,onSave,saving,initialDate,initialData,platformPrices,isEd
     return result;
   },[f,hours,platformPrices]);
   const ok=f.name.trim()&&f.date&&hours>0&&!saving;
-  const save=()=>{if(!ok)return;if(f.plan==='custom'&&f.customPrice){const cp=+String(f.customPrice).replace(/,/g,'');PL.custom.fp=cp;}const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;onSave({name:f.name,date:f.date,hours,startTime:f.startTime,endTime:f.endTime,platform:f.platform,plan:f.plan,option:+f.option||0,discountRate:+f.dr||0,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,promoLink:f.promo,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,...(cf!==null?{customFee:cf}:{})});}
+  const save=()=>{if(!ok)return;if(f.plan==='custom'&&f.customPrice){const cp=+String(f.customPrice).replace(/,/g,'');PL.custom.fp=cp;}const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;onSave({name:f.name,date:f.date,hours,startTime:f.startTime,endTime:f.endTime,platform:f.platform,plan:f.plan,option:+f.option||0,discountRate:+f.dr||0,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,promoLink:f.promo,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,customPrice:f.plan==='custom'?+String(f.customPrice||'').replace(/,/g,''):0,...(cf!==null?{customFee:cf}:{})});}
   const previewRows=[
     [(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded?'プラン料金（税込）':'プラン料金（税抜）',yen(c.base)],
     ...(c.disc>0?[[`お得意様割 ${c.dr}%OFF`,'−'+yen(c.disc)]]:[]),
@@ -879,7 +881,7 @@ function App(){
       const{error:e}=await sb.from('bookings').update({
         name:row.name,date:row.date,start_time:row.startTime,end_time:row.endTime,
         hours:row.hours,platform:row.platform,plan:row.plan,
-        option_amount:row.option||0,discount_rate:row.discountRate||0,...(row.discountAmt>0?{discount_amount:row.discountAmt}:{}),
+        option_amount:row.option||0,discount_rate:row.discountRate||0,...(row.discountAmt>0?{discount_amount:row.discountAmt}:{}),custom_price:row.customPrice||0,
         promo_link:row.promoLink||false,tax_included:row.taxIncluded||false,
         custom_fee:row.customFee??null,
       }).eq('id',sel.id);

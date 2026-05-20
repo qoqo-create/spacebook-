@@ -240,9 +240,8 @@ function BCard({b,onClick}){
 }
 
 // ── ホーム
-function Home({bookings,loading,error,onTap,onAdd,onRefresh,goal}){
-  const today=new Date();
-  const [vY,setVY]=useState(today.getFullYear());const [vM,setVM]=useState(today.getMonth());const [sel,setSel]=useState(null);
+function Home({bookings,loading,error,onTap,onAdd,onRefresh,goal,vY,vM,setVY,setVM}){
+  const [sel,setSel]=useState(null);
   const ms=`${vY}-${String(vM+1).padStart(2,'0')}`;
   const {tn,tf,cnt,totalHrs}=useMemo(()=>{let tn=0,tf=0,cnt=0,totalHrs=0;bookings.forEach(b=>{if(!b.date.startsWith(ms))return;const c=calcB(b,getCF(b));tn+=c.net;tf+=c.fee;cnt++;totalHrs+=Number(b.hours)||0;});return{tn,tf,cnt,totalHrs};},[bookings,ms]);
   const pct=Math.min(100,Math.round(tn/goal*100));
@@ -451,15 +450,15 @@ function Add({onCancel,onSave,saving,initialDate,initialData,platformPrices,isEd
     if(pp['6h'])pl2['6h']={...pl2['6h'],pph:pp['6h'],fp:pp['6h']*6};
     if(pp['9h'])pl2['9h']={...pl2['9h'],pph:pp['9h'],fp:pp['9h']*9};
     if(pp['12h'])pl2['12h']={...pl2['12h'],pph:pp['12h'],fp:pp['12h']*12};
-    if(f.plan==='custom'&&f.customPrice){const cp=+String(f.customPrice).replace(/,/g,'');pl2.custom={...pl2.custom,fp:cp};}
-    const b={...f,hours:hours||1,option:+f.option||0,discountRate:+f.dr||0,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0};
+    const customP=f.plan==='custom'&&f.customPrice?+String(f.customPrice).replace(/,/g,''):0;
+    const b={...f,hours:hours||1,option:+f.option||0,discountRate:+f.dr||0,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,customPrice:customP};
     const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;
-    // 一時的にPLを上書きして計算
+    // PLは書き換えない（グローバル汚染防止）
     const origPL={...PL};Object.assign(PL,pl2);const result=calcB(b,cf);Object.assign(PL,origPL);
     return result;
   },[f,hours,platformPrices]);
   const ok=f.name.trim()&&f.date&&hours>0&&!saving;
-  const save=()=>{if(!ok)return;if(f.plan==='custom'&&f.customPrice){const cp=+String(f.customPrice).replace(/,/g,'');PL.custom.fp=cp;}const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;onSave({name:f.name,date:f.date,hours,startTime:f.startTime,endTime:f.endTime,platform:f.platform,plan:f.plan,option:+f.option||0,discountRate:+f.dr||0,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,promoLink:f.promo,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,customPrice:f.plan==='custom'?+String(f.customPrice||'').replace(/,/g,''):0,...(cf!==null?{customFee:cf}:{})});}
+  const save=()=>{if(!ok)return;const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;onSave({name:f.name,date:f.date,hours,startTime:f.startTime,endTime:f.endTime,platform:f.platform,plan:f.plan,option:+f.option||0,discountRate:+f.dr||0,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,promoLink:f.promo,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,customPrice:f.plan==='custom'?+String(f.customPrice||'').replace(/,/g,''):0,...(cf!==null?{customFee:cf}:{})});}
   const previewRows=[
     [(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded?'プラン料金（税込）':'プラン料金（税抜）',yen(c.base)],
     ...(c.disc>0?[[`お得意様割 ${c.dr}%OFF`,'−'+yen(c.disc)]]:[]),
@@ -799,6 +798,9 @@ function App(){
   const [saving,setSaving]=useState(false);
   const [deleting,setDeleting]=useState(false);
   const [editTarget,setEditTarget]=useState(null);
+  const _today=new Date();
+  const [homeVY,setHomeVY]=useState(_today.getFullYear());
+  const [homeVM,setHomeVM]=useState(_today.getMonth());
   const [oIdx,setOIdx]=useState(0);
   const [addDate,setAddDate]=useState(null);
   const [onboarded]=useState(()=>!!localStorage.getItem('sb_onboarded'));
@@ -852,6 +854,8 @@ function App(){
       if(e)throw e;
       await fetchBooks();
       setSub(null);
+      // 保存した予約の月をホーム表示月に
+      if(payload.date){const[yy,mm]=payload.date.split('-');setHomeVY(+yy);setHomeVM(+mm-1);}
     }catch(e){alert('保存に失敗しました: '+e.message);}
     finally{setSaving(false);}
   };
@@ -964,7 +968,7 @@ function App(){
             {sub==='detail'&&sel&&<Detail b={sel} onBack={()=>setSub(null)} onDelete={handleDelete} deleting={deleting} onEdit={b=>{setEditTarget(b);setSub('edit');}}/>}
             {sub==='add'&&<Add onCancel={()=>setSub(null)} initialDate={addDate} onSave={handleSave} saving={saving} platformPrices={platformPrices}/>}
             {sub==='edit'&&editTarget&&<Add onCancel={()=>{setSub('detail');setEditTarget(null);}} initialDate={editTarget.date} initialData={editTarget} onSave={handleUpdate} saving={saving} platformPrices={platformPrices} isEdit={true}/>}
-            {!sub&&tab==='home'&&<Home bookings={books} loading={loading} error={error} onTap={b=>{setSel(b);setSub('detail');}} onAdd={d=>{setAddDate(d);setSub('add');}} onRefresh={fetchBooks} goal={goal}/>}
+            {!sub&&tab==='home'&&<Home bookings={books} loading={loading} error={error} onTap={b=>{setSel(b);setSub('detail');}} onAdd={d=>{setAddDate(d);setSub('add');}} onRefresh={fetchBooks} goal={goal} vY={homeVY} vM={homeVM} setVY={setHomeVY} setVM={setHomeVM}/>}
             {!sub&&tab==='stats'&&<Stats bookings={books}/>}
             {!sub&&tab==='set'&&<Setting goal={goal} setGoalLocal={setGoalLocal} onSaveGoal={handleSaveGoal} savingGoal={savingGoal} platformPrices={platformPrices} onSavePrices={savePlatformPrices} onReplay={()=>{localStorage.removeItem('sb_onboarded');setOIdx(0);setPhase('onboarding');}}/>}
           </div>

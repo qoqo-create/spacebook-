@@ -78,7 +78,7 @@ const toRow=b=>({
   id:b.id, name:b.name, date:b.date,
   start_time:b.startTime, end_time:b.endTime,
   hours:b.hours, platform:b.platform, plan:b.plan,
-  option_amount:b.option||0, discount_rate:b.discountRate||0, ...(b.discountAmt>0?{discount_amount:b.discountAmt}:{}), custom_price:b.customPrice||0,
+  option_amount:b.option||0, option_labels:(b.optionLabels&&b.optionLabels.length>0)?b.optionLabels:null, discount_rate:b.discountRate||0, ...(b.discountAmt>0?{discount_amount:b.discountAmt}:{}), custom_price:b.customPrice||0,
   promo_link:b.promoLink||false, tax_included:b.taxIncluded||false,
   custom_fee:b.customFee??null, pi:b.pi||0,
 });
@@ -86,7 +86,7 @@ const fromRow=r=>({
   id:r.id, name:r.name, date:r.date,
   startTime:r.start_time, endTime:r.end_time,
   hours:Number(r.hours), platform:r.platform, plan:r.plan,
-  option:Number(r.option_amount)||0, discountRate:Number(r.discount_rate)||0, discountAmt:Number(r.discount_amount)||0, customPrice:Number(r.custom_price)||0,
+  option:Number(r.option_amount)||0, optionLabels:Array.isArray(r.option_labels)?r.option_labels:null, discountRate:Number(r.discount_rate)||0, discountAmt:Number(r.discount_amount)||0, customPrice:Number(r.custom_price)||0,
   promoLink:r.promo_link||false, taxIncluded:r.tax_included||false,
   customFee:r.custom_fee!=null?Number(r.custom_fee):null, pi:r.pi||0,
 });
@@ -125,8 +125,8 @@ const fmtDate=d=>{if(!d)return '';const[y,m,dd]=d.split('-');return `${y}年${+m
 const man=n=>{const v=Math.round(n);return v>=10000?(v/10000).toFixed(1)+'万':v.toLocaleString();};
 
 // ── 計算
-function calcB(b,cf=null){
-  const pl=PL[b.plan]||PL.basic;const pf=PF[b.platform];
+function calcB(b,cf=null,plOverride=null){
+  const pl=plOverride||PL[b.plan]||PL.basic;const pf=PF[b.platform];
   // カスタムプランの場合、booking自体に保存されたcustomPriceを使う
   const baseFp=b.plan==='custom'&&b.customPrice?b.customPrice:(pl.fp||0);
   const base=pl.hrs?(pl.pph||0)*pl.hrs:pl.pph?pl.pph*(b.hours||1):baseFp;
@@ -360,7 +360,6 @@ function Detail({b,onBack,onDelete,deleting,onEdit}){
     ...(b.option?[['オプション（税抜）',(b.option>=0?'+':'')+yen(b.option),null]]:[]),
     ...(b.discountAmt>0?[['割引','−'+yen(b.discountAmt),'#0F6E56']]:[]),
     ...(!b.taxIncluded?[['消費税 10%',yen(c.tax),null]]:[]),
-    ...(b.option?[['オプション',(b.option>=0?'+':'')+yen(b.option),null]]:[]),
     ...(c.ub?[['サイト手数料 2.98%','−'+yen(c.ub.sf),C.coral],['決済手数料 3.5%+¥99','−'+yen(c.ub.pf2),C.coral]]:[
       [`手数料 ${c.fr}%`,'−'+yen(c.fee),C.coral]]),
     ['純売上',yen(c.net),C.teal],
@@ -435,30 +434,43 @@ function Add({onCancel,onSave,saving,initialDate,initialData,platformPrices,isEd
     startTime:initialData.startTime||'10:00',endTime:initialData.endTime||'13:00',
     platform:initialData.platform||'space',plan:initialData.plan||'basic',
     option:String(initialData.option||0),customFee:initialData.customFee!=null?String(initialData.customFee):'',
-    customPrice:'',dr:String(initialData.discountRate||0),
+    customPrice:initialData.customPrice?String(initialData.customPrice):'',dr:String(initialData.discountRate||0),
     promo:initialData.promoLink||false,taxIncluded:initialData.taxIncluded||false,discountAmt:String(initialData.discountAmt||''),
   }:{name:'',date:td,startTime:'10:00',endTime:'13:00',platform:'space',plan:'basic',option:'0',customFee:'',customPrice:'',dr:'0',promo:false,taxIncluded:false,discountAmt:''});
-  const [selOpts,setSelOpts]=useState([]);
+  // 編集時：保存済みのラベルがあればそれを使用、なければオプション金額から逆算（古いデータ用フォールバック）
+  const [selOpts,setSelOpts]=useState(()=>{
+    if(initialData?.optionLabels&&Array.isArray(initialData.optionLabels)&&initialData.optionLabels.length>0){
+      // 現在のOPTSに存在するラベルだけ採用（OPTSが変わった場合の安全対策）
+      return initialData.optionLabels.filter(l=>OPTS.some(o=>o.label===l));
+    }
+    const target=+(initialData?.option)||0;
+    if(!target)return [];
+    const n=OPTS.length;
+    for(let mask=1;mask<(1<<n);mask++){
+      let sum=0;const labels=[];
+      for(let i=0;i<n;i++)if(mask&(1<<i)){sum+=OPTS[i].price;labels.push(OPTS[i].label);}
+      if(sum===target)return labels;
+    }
+    return [];
+  });
   const toggleOpt=label=>{const next=selOpts.includes(label)?selOpts.filter(x=>x!==label):[...selOpts,label];setSelOpts(next);u('option',String(next.reduce((s,l)=>{const o=OPTS.find(x=>x.label===l);return s+(o?o.price:0);},0)));};
   const u=(k,v)=>setF(p=>({...p,[k]:v}));
   const hours=useMemo(()=>{const[sh,sm]=f.startTime.split(':').map(Number);const[eh,em]=f.endTime.split(':').map(Number);const d=(eh*60+em)-(sh*60+sm);return d>0?d/60:0;},[f.startTime,f.endTime]);
   const c=useMemo(()=>{
     const pp=platformPrices?.[f.platform]||{};
-    const pl2={...PL};
-    if(pp.basic)pl2.basic={...pl2.basic,pph:pp.basic};
-    if(pp['3h'])pl2['3h']={...pl2['3h'],pph:pp['3h'],fp:pp['3h']*3};
-    if(pp['6h'])pl2['6h']={...pl2['6h'],pph:pp['6h'],fp:pp['6h']*6};
-    if(pp['9h'])pl2['9h']={...pl2['9h'],pph:pp['9h'],fp:pp['9h']*9};
-    if(pp['12h'])pl2['12h']={...pl2['12h'],pph:pp['12h'],fp:pp['12h']*12};
+    // 該当プランだけpphを上書き（グローバルPLは触らない）
+    let plForCalc=PL[f.plan]||PL.basic;
+    if(pp[f.plan]&&f.plan!=='custom'){
+      const newPph=pp[f.plan];
+      plForCalc={...plForCalc,pph:newPph,...(plForCalc.hrs?{fp:newPph*plForCalc.hrs}:{})};
+    }
     const customP=f.plan==='custom'&&f.customPrice?+String(f.customPrice).replace(/,/g,''):0;
     const b={...f,hours:hours||1,option:+f.option||0,discountRate:+f.dr||0,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,customPrice:customP};
     const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;
-    // PLは書き換えない（グローバル汚染防止）
-    const origPL={...PL};Object.assign(PL,pl2);const result=calcB(b,cf);Object.assign(PL,origPL);
-    return result;
+    return calcB(b,cf,plForCalc);
   },[f,hours,platformPrices]);
   const ok=f.name.trim()&&f.date&&hours>0&&!saving;
-  const save=()=>{if(!ok)return;const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;onSave({name:f.name,date:f.date,hours,startTime:f.startTime,endTime:f.endTime,platform:f.platform,plan:f.plan,option:+f.option||0,discountRate:+f.dr||0,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,promoLink:f.promo,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,customPrice:f.plan==='custom'?+String(f.customPrice||'').replace(/,/g,''):0,...(cf!==null?{customFee:cf}:{})});}
+  const save=()=>{if(!ok)return;const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;onSave({name:f.name,date:f.date,hours,startTime:f.startTime,endTime:f.endTime,platform:f.platform,plan:f.plan,option:+f.option||0,optionLabels:selOpts.length>0?selOpts:null,discountRate:+f.dr||0,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,promoLink:f.promo,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,customPrice:f.plan==='custom'?+String(f.customPrice||'').replace(/,/g,''):0,...(cf!==null?{customFee:cf}:{})});}
   const previewRows=[
     [(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded?'プラン料金（税込）':'プラン料金（税抜）',yen(c.base)],
     ...(c.disc>0?[[`お得意様割 ${c.dr}%OFF`,'−'+yen(c.disc)]]:[]),
@@ -855,7 +867,7 @@ function App(){
       await fetchBooks();
       setSub(null);
       // 保存した予約の月をホーム表示月に
-      if(payload.date){const[yy,mm]=payload.date.split('-');setHomeVY(+yy);setHomeVM(+mm-1);}
+      if(b.date){const[yy,mm]=b.date.split('-');setHomeVY(+yy);setHomeVM(+mm-1);}
     }catch(e){alert('保存に失敗しました: '+e.message);}
     finally{setSaving(false);}
   };
@@ -876,16 +888,11 @@ function App(){
   const handleUpdate=async(updated)=>{
     setSaving(true);
     try{
-      const row={...updated,id:sel.id,pi:sel.pi||0};
-      // hours計算
-      const[sh,sm]=updated.startTime.split(':').map(Number);
-      const[eh,em]=updated.endTime.split(':').map(Number);
-      const hrs=(eh*60+em)-(sh*60+sm);
-      row.hours=hrs>0?hrs/60:sel.hours;
+      const row={...updated,id:sel.id,pi:sel.pi||0,hours:updated.hours||sel.hours};
       const{error:e}=await sb.from('bookings').update({
         name:row.name,date:row.date,start_time:row.startTime,end_time:row.endTime,
         hours:row.hours,platform:row.platform,plan:row.plan,
-        option_amount:row.option||0,discount_rate:row.discountRate||0,...(row.discountAmt>0?{discount_amount:row.discountAmt}:{}),custom_price:row.customPrice||0,
+        option_amount:row.option||0,option_labels:(row.optionLabels&&row.optionLabels.length>0)?row.optionLabels:null,discount_rate:row.discountRate||0,...(row.discountAmt>0?{discount_amount:row.discountAmt}:{}),custom_price:row.customPrice||0,
         promo_link:row.promoLink||false,tax_included:row.taxIncluded||false,
         custom_fee:row.customFee??null,
       }).eq('id',sel.id);

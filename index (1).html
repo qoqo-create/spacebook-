@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SpaceBook">
+<meta name="theme-color" content="#0D2B28">
+<title>SpaceBook</title>
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="icon-512.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{height:100%;height:-webkit-fill-available}
+body{
+  width:100%;height:100vh;height:-webkit-fill-available;overflow:hidden;background:#F0FBF9;
+  font-family:'M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Hiragino Maru Gothic Pro','rounded-mplus-1c',sans-serif;
+  font-size:14px;
+  font-weight:500;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:0.02em;
+}
+/* フォントサイズ階層の統一 */
+.fs-xs{font-size:10px}
+.fs-sm{font-size:11px}
+.fs-base{font-size:13px}
+.fs-md{font-size:15px}
+.fs-lg{font-size:18px}
+.fs-xl{font-size:22px}
+.fw-n{font-weight:400}
+.fw-m{font-weight:600}
+.fw-b{font-weight:700}
+.fw-xb{font-weight:800}
+.fw-black{font-weight:900}
+#root{width:100%;height:100%;display:flex;flex-direction:column}
+.app{width:100%;height:100%;max-width:430px;margin:0 auto;display:flex;flex-direction:column;position:relative;background:#F0FBF9;}
+.content{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.content::-webkit-scrollbar{display:none}
+.navbar{flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0px);}
+.header-safe{padding-top:env(safe-area-inset-top,44px);}
+select{-webkit-appearance:none;appearance:none}
+input[type=number]{-moz-appearance:textfield}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin 1s linear infinite}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade{animation:fadeIn .25s ease}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
+<script type="text/babel">
+const {useState,useMemo,useEffect,useCallback}=React;
+
+// ── Supabase
+const {createClient}=supabase;
+const sb=createClient(
+  'https://cnsoenjefbhsmljgcuan.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNuc29lbmplZmJoc21samdjdWFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMTk2NjUsImV4cCI6MjA5NDY5NTY2NX0.rYgbSmp3_5a7MEU_agmUggE8tlJik3ZjkbSHDkgmIIk'
+);
+
+// DB ↔ アプリ 変換
+const toRow=b=>({
+  id:b.id, name:b.name, date:b.date,
+  start_time:b.startTime, end_time:b.endTime,
+  hours:b.hours, platform:b.platform, plan:b.plan,
+  option_amount:b.option||0, option_labels:(b.optionLabels&&b.optionLabels.length>0)?b.optionLabels:null, discount_rate:b.discountRate||0, ...(b.discountAmt>0?{discount_amount:b.discountAmt}:{}), custom_price:b.customPrice||0,
+  promo_link:b.promoLink||false, tax_included:b.taxIncluded||false,
+  custom_fee:b.customFee??null, pi:b.pi||0,
+});
+const fromRow=r=>({
+  id:r.id, name:r.name, date:r.date,
+  startTime:r.start_time, endTime:r.end_time,
+  hours:Number(r.hours), platform:r.platform, plan:r.plan,
+  option:Number(r.option_amount)||0, optionLabels:Array.isArray(r.option_labels)?r.option_labels:null, discountRate:Number(r.discount_rate)||0, discountAmt:Number(r.discount_amount)||0, customPrice:Number(r.custom_price)||0,
+  promoLink:r.promo_link||false, taxIncluded:r.tax_included||false,
+  customFee:r.custom_fee!=null?Number(r.custom_fee):null, pi:r.pi||0,
+});
+
+// ── 定数
+const C={teal:'#2DD4BF',coral:'#FF6B6B',bg:'#F0FBF9',white:'#FFFFFF',text:'#1A2E2B',sub:'#9CA3AF',border:'#D1EDE9'};
+const PAL=[{bg:'#F0FBF9'},{bg:'#FFF0F0'},{bg:'#F5F0FF'},{bg:'#FFFBEA'},{bg:'#F0F8FF'}];
+const PF={
+  space:{label:'スペースマーケット',fee:30,color:'#2DD4BF',bg:'#E1F5EE',mf:300},
+  insta:{label:'インスタベース',fee:35,color:'#60A5FA',bg:'#E6F1FB',mf:0},
+  upnow:{label:'up now',fee:9.3,color:'#F59E0B',bg:'#FAEEDA',mf:0,cx:true},
+  kashi:{label:'カシカシ',fee:25,color:'#D4537E',bg:'#FBEAF0',mf:300},
+  direct:{label:'直予約',fee:0,color:'#A78BFA',bg:'#F5F0FF',mf:0},
+  other:{label:'その他',fee:0,color:'#9CA3AF',bg:'#F1EFE8',mf:0},
+};
+const PL={basic:{label:'基本プラン',pph:3400,hrs:null},'3h':{label:'3時間プラン',pph:3200,hrs:3},'6h':{label:'6時間プラン',pph:2800,hrs:6},'9h':{label:'9時間プラン',pph:2800,hrs:9},'12h':{label:'12時間プラン',pph:2800,hrs:12},custom:{label:'カスタム',fp:0,hrs:null}};
+// 媒体別デフォルト単価（設定で上書き可能）
+const DEFAULT_PRICES={
+  space: {basic:3400,'3h':3200,'6h':2800,'9h':2800,'12h':2800,enabled:{basic:true,'3h':true,'6h':true,'9h':true,'12h':true}},
+  insta: {basic:3400,'3h':3200,'6h':2800,'9h':2800,'12h':2800,enabled:{basic:true,'3h':true,'6h':true,'9h':true,'12h':true}},
+  upnow: {basic:3400,'3h':3200,'6h':2800,'9h':2800,'12h':2800,enabled:{basic:true,'3h':true,'6h':true,'9h':true,'12h':true}},
+  kashi: {basic:3400,'3h':3200,'6h':2800,'9h':2800,'12h':2800,enabled:{basic:true,'3h':true,'6h':true,'9h':true,'12h':true}},
+  direct:{basic:3400,'3h':3200,'6h':2800,'9h':2800,'12h':2800,enabled:{basic:true,'3h':true,'6h':true,'9h':true,'12h':true}},
+  other: {basic:3400,'3h':3200,'6h':2800,'9h':2800,'12h':2800,enabled:{basic:true,'3h':true,'6h':true,'9h':true,'12h':true}},
+};
+const OPTS=[
+  {label:'レフ板',price:500},
+  {label:'チューブライト（2本）',price:1500},
+  {label:'フォグマシン',price:1200},
+  {label:'スモークマシン',price:1000},
+  {label:'ドラムセット一式',price:4000},
+  {label:'マイクスタンド',price:1000},
+];
+const yen=n=>'¥'+Math.round(n).toLocaleString('ja-JP');
+const fmtDate=d=>{if(!d)return '';const[y,m,dd]=d.split('-');return `${y}年${+m}月${+dd}日`;};
+const man=n=>{const v=Math.round(n);return v>=10000?(v/10000).toFixed(1)+'万':v.toLocaleString();};
+
+// ── 計算
+function calcB(b,cf=null,plOverride=null){
+  const pl=plOverride||PL[b.plan]||PL.basic;const pf=PF[b.platform];
+  // カスタムプランの場合、booking自体に保存されたcustomPriceを使う
+  const baseFp=b.plan==='custom'&&b.customPrice?b.customPrice:(pl.fp||0);
+  const base=pl.hrs?(pl.pph||0)*pl.hrs:pl.pph?pl.pph*(b.hours||1):baseFp;
+  const mf=pf?.mf??0;const dr=b.discountRate||0;const disc=Math.round(base*dr/100);
+  const taxIncluded=b.taxIncluded||false;
+  const dAmt=b.discountAmt||0;
+  // オプションも消費税の対象なので税前に含める（追加割引は税前に差し引く）
+  const preTax=base-disc-dAmt+mf+(b.option||0);
+  const tax=taxIncluded?0:Math.round(preTax*0.1);
+  const taxed=taxIncluded?preTax:preTax+tax;
+  const wo=taxed;
+  if(b.platform==='upnow'&&cf===null){
+    const sf=Math.ceil(wo*0.0298),pf2=Math.ceil(wo*0.035)+99;const fee=sf+pf2;
+    return{base,mf,disc,dr,tax,taxed,wo,fee,fr:Math.round(fee/wo*1000)/10,net:wo-fee,ub:{sf,pf2},taxIncluded};
+  }
+  const fr=cf!==null?cf:(pf?.fee??0);const fee=Math.round(wo*fr/100);
+  return{base,mf,disc,dr,tax,taxed,wo,fee,fr,net:wo-fee,taxIncluded};
+}
+function getCF(b){
+  if(b.platform==='space'&&b.promoLink)return 5;
+  if(b.platform==='kashi'&&b.promoLink)return 0;
+  return b.customFee!=null?b.customFee:null;
+}
+
+// ── UIパーツ
+const BI=({n,s=16,c,st={}})=>(<i className={`bi bi-${n}`} style={{fontSize:s,color:c,lineHeight:1,display:'inline-flex',...st}}/>);
+const Lbl=({icon,children})=>(<p style={{fontSize:11,fontWeight:700,color:C.sub,marginBottom:6,letterSpacing:'0.4px',display:'flex',alignItems:'center',gap:4}}><BI n={icon} s={12} st={{opacity:.7}}/>{children}</p>);
+const Spin=()=>(<div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:40}}><BI n="arrow-clockwise" s={28} c={C.teal} st={{className:'spin'}}/></div>);
+const Err=({msg,onRetry})=>(<div style={{margin:'20px 16px',background:'#FFF0F0',borderRadius:16,padding:16,textAlign:'center'}}><BI n="exclamation-triangle-fill" s={24} c={C.coral}/><p style={{fontSize:13,color:C.coral,marginTop:8,fontWeight:600}}>{msg}</p><button onClick={onRetry} style={{marginTop:12,background:C.coral,color:'#fff',border:'none',borderRadius:99,padding:'8px 20px',fontSize:12,fontWeight:700,cursor:'pointer'}}>再試行</button></div>);
+
+function LogoMark({size=32,radius=12}){
+  return(<div style={{width:size,height:size,borderRadius:radius,background:'linear-gradient(135deg,#2DD4BF,#0F6E56)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><BI n="building-fill" s={size*0.48} c="#fff"/></div>);
+}
+
+// ── カレンダー
+function Cal({bookings,selDate,onDay,vY,vM,onPrev,onNext}){
+  const today=new Date();
+  const bmap=useMemo(()=>{const m={};bookings.forEach(b=>{if(!m[b.date])m[b.date]=[];m[b.date].push(b);});return m;},[bookings]);
+  const fd=new Date(vY,vM,1).getDay();const dim=new Date(vY,vM+1,0).getDate();
+  const cells=[...Array(fd).fill(null),...Array.from({length:dim},(_,i)=>i+1)];
+  const ds=d=>`${vY}-${String(vM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  const isT=d=>d&&vY===today.getFullYear()&&vM===today.getMonth()&&d===today.getDate();
+  const WD=['日','月','火','水','木','金','土'];
+  return(
+    <div style={{margin:'10px 14px 0',background:C.white,borderRadius:18,padding:'12px',border:`1px solid ${C.border}`}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <button onClick={onPrev} style={{width:32,height:32,borderRadius:'50%',background:C.bg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><BI n="chevron-left" s={14} c={C.sub}/></button>
+        <p style={{fontSize:14,fontWeight:700,color:C.text}}>{vY}年 {vM+1}月</p>
+        <button onClick={onNext} style={{width:32,height:32,borderRadius:'50%',background:C.bg,border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><BI n="chevron-right" s={14} c={C.sub}/></button>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',marginBottom:4}}>
+        {WD.map((w,i)=><div key={w} style={{textAlign:'center',fontSize:10,fontWeight:700,color:i===0?'#FF6B6B':i===6?'#60A5FA':C.sub,padding:'2px 0'}}>{w}</div>)}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px 0'}}>
+        {cells.map((d,i)=>{
+          const s=d?ds(d):null;const ents=s?(bmap[s]||[]):[];const sel2=d&&s===selDate;const tod=isT(d);const dow=(fd+(d||1)-1)%7;
+          return(<div key={i} onClick={()=>d&&onDay(s)} style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'2px 0',cursor:d?'pointer':'default',borderRadius:8,background:sel2?C.text:'transparent'}}>
+            {d&&<span style={{fontSize:12,fontWeight:tod||ents.length?700:400,lineHeight:'24px',width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',color:sel2?'#fff':tod?C.teal:dow===0?'#FF6B6B':dow===6?'#60A5FA':C.text,border:tod&&!sel2?`2px solid ${C.teal}`:'none'}}>{d}</span>}
+            {d&&<div style={{height:5,display:'flex',gap:2,alignItems:'center',justifyContent:'center'}}>{ents.slice(0,3).map((b,j)=><div key={j} style={{width:4,height:4,borderRadius:'50%',background:sel2?'#fff':PF[b.platform]?.color??C.teal}}/>)}</div>}
+          </div>);
+        })}
+      </div>
+      {selDate&&bmap[selDate]&&(
+        <div style={{marginTop:10,borderTop:`1px solid ${C.border}`,paddingTop:8}}>
+          <p style={{fontSize:11,fontWeight:600,color:C.sub,marginBottom:6}}>{fmtDate(selDate)} の予約</p>
+          {bmap[selDate].map(b=>{const p=PF[b.platform];const c=calcB(b,getCF(b));return(
+            <div key={b.id} style={{display:'flex',alignItems:'center',gap:8,background:p.bg,borderRadius:10,padding:'6px 10px',marginBottom:4}}>
+              <div style={{width:24,height:24,borderRadius:8,background:C.white,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:10,fontWeight:800,color:p.color}}>{b.hours}H</span></div>
+              <div style={{flex:1}}><p style={{fontSize:12,fontWeight:700,color:C.text}}>{b.name}</p></div>
+              <p style={{fontSize:12,fontWeight:800,color:p.color}}>{yen(c.net)}</p>
+            </div>
+          );})}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 予約カード
+function BCard({b,onClick}){
+  const pal=PAL[b.pi??0];const c=useMemo(()=>calcB(b,getCF(b)),[b]);const p=PF[b.platform];
+  return(
+    <button onClick={onClick} className="fade" style={{width:'100%',background:C.white,border:`1.5px solid ${C.border}`,borderRadius:18,padding:'12px 14px',textAlign:'left',cursor:'pointer',marginBottom:10,boxShadow:'0 1px 4px rgba(0,0,0,0.04)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
+          {/* 時間バッジ */}
+          <div style={{width:44,height:44,borderRadius:14,background:p.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <span style={{fontSize:14,fontWeight:900,color:p.color,lineHeight:1}}>{b.hours}</span>
+            <span style={{fontSize:9,fontWeight:700,color:p.color,opacity:.7}}>H</span>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            {/* 媒体タグ（名前の上） */}
+            <div style={{display:'flex',gap:5,alignItems:'center',marginBottom:4,flexWrap:'wrap'}}>
+              <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:99,background:p.bg,color:p.color,whiteSpace:'nowrap'}}>{p.label}</span>
+              <span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:99,background:C.bg,color:C.sub,whiteSpace:'nowrap'}}>{PL[b.plan]?.label||'カスタム'}</span>
+              {b.promoLink&&<span style={{display:'flex',alignItems:'center',gap:2,fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:99,background:'#FAEEDA',color:'#854F0B',whiteSpace:'nowrap'}}><BI n="link-45deg" s={9}/>プロモ</span>}
+            </div>
+            {/* 名前・日付 */}
+            <p style={{fontSize:16,fontWeight:800,color:C.text}}>{b.name}</p>
+            <p style={{fontSize:11,fontWeight:600,color:C.sub,marginTop:2}}>{fmtDate(b.date)}</p>
+          </div>
+        </div>
+        {/* 金額（右） */}
+        <div style={{textAlign:'right',flexShrink:0,marginLeft:10}}>
+          <p style={{fontSize:17,fontWeight:900,color:C.text,letterSpacing:'-0.3px'}}>{man(c.net)}<span style={{fontSize:12,fontWeight:700}}>円</span></p>
+          <p style={{fontSize:11,fontWeight:600,color:C.coral,marginTop:2}}>手数料 −{man(c.fee)}円</p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ── ホーム
+function Home({bookings,loading,error,onTap,onAdd,onRefresh,goal,vY,vM,setVY,setVM}){
+  const [sel,setSel]=useState(null);
+  const ms=`${vY}-${String(vM+1).padStart(2,'0')}`;
+  const {tn,tf,cnt,totalHrs,tDirect,tOther}=useMemo(()=>{let tn=0,tf=0,cnt=0,totalHrs=0,tDirect=0,tOther=0;bookings.forEach(b=>{if(!b.date.startsWith(ms))return;const c=calcB(b,getCF(b));tn+=c.net;tf+=c.fee;cnt++;totalHrs+=Number(b.hours)||0;if(b.platform==='direct')tDirect+=c.net;if(b.platform==='other')tOther+=c.net;});return{tn,tf,cnt,totalHrs,tDirect,tOther};},[bookings,ms]);
+  const pct=Math.min(100,Math.round(tn/goal*100));
+  const prev=()=>{if(vM===0){setVM(11);setVY(y=>y-1);}else setVM(m=>m-1);setSel(null);};
+  const next=()=>{if(vM===11){setVM(0);setVY(y=>y+1);}else setVM(m=>m+1);setSel(null);};
+  const filtered=sel?bookings.filter(b=>b.date===sel):bookings.filter(b=>b.date.startsWith(ms));
+  const [pullY,setPullY]=useState(0);
+  const startY=React.useRef(0);const threshold=70;
+  const onTS=e=>{if(e.currentTarget.scrollTop===0)startY.current=e.touches[0].clientY;};
+  const onTM=e=>{if(!startY.current)return;const dy=e.touches[0].clientY-startY.current;if(dy>0&&e.currentTarget.scrollTop===0)setPullY(Math.min(dy*0.4,threshold));};
+  const onTE=async()=>{if(pullY>=threshold-4)await onRefresh();setPullY(0);startY.current=0;};
+  return(
+    <div style={{paddingBottom:24,overflowY:'auto'}} className="header-safe"
+      onTouchStart={onTS} onTouchMove={onTM} onTouchEnd={onTE}>
+      <div style={{height:pullY,overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center',transition:pullY===0?'height .3s ease':'none'}}>
+        {pullY>8&&<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+          <BI n="arrow-clockwise" s={20} c={C.teal} st={{transform:`rotate(${pullY*4}deg)`,transition:'none'}}/>
+          <p style={{fontSize:10,color:C.sub,fontWeight:600}}>{pullY>=threshold-4?'離して更新':'引っ張って更新'}</p>
+        </div>}
+      </div>
+      <div style={{padding:'16px 16px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <LogoMark size={38} radius={14}/>
+          <div>
+            <p style={{fontSize:18,fontWeight:900,color:C.text,lineHeight:1,letterSpacing:'1px'}}>SpaceBook</p>
+            <p style={{fontSize:10,color:C.sub,letterSpacing:'1px',marginTop:2}}>スペース収支管理</p>
+          </div>
+        </div>
+        {loading&&<BI n="arrow-clockwise" s={18} c={C.teal} st={{animation:'spin 1s linear infinite'}}/>}
+      </div>
+
+      {/* ヒーローカード */}
+      <div style={{margin:'12px 16px 0',borderRadius:24,padding:16,position:'relative',overflow:'hidden',background:'linear-gradient(135deg,#1A4A44,#2DD4BF 70%,#0F6E56)'}}>
+        <div style={{position:'absolute',top:-24,right:-24,width:100,height:100,borderRadius:'50%',background:'rgba(255,255,255,.08)'}}/>
+        <p style={{fontSize:11,fontWeight:600,color:'rgba(255,255,255,.75)',letterSpacing:1.5,display:'flex',alignItems:'center',gap:4}}><BI n="arrow-up-right" s={12} c="rgba(255,255,255,.75)"/>{vY}年{vM+1}月 純売上</p>
+        <p style={{fontSize:32,fontWeight:900,color:'#fff',margin:'6px 0 0',letterSpacing:'-0.5px'}}>{yen(tn)}</p>
+        <div style={{marginTop:12,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          {[['calendar-check-fill','予約件数',cnt+'件'],['clock-fill','合計時間',totalHrs+'時間'],['percent','手数料',yen(tf)],['bullseye','達成率',pct+'%']].map(([ic,l,v])=>(
+            <div key={l} style={{background:'rgba(255,255,255,.18)',borderRadius:12,padding:'6px 10px'}}>
+              <p style={{fontSize:10,color:'rgba(255,255,255,.8)',fontWeight:700,display:'flex',alignItems:'center',gap:3}}><BI n={ic} s={9} c="rgba(255,255,255,.75)"/>{l}</p>
+              <p style={{fontSize:12,fontWeight:800,color:'#fff',marginTop:2}}>{v}</p>
+            </div>
+          ))}
+        </div>
+        {(tDirect>0||tOther>0)&&(
+          <div style={{marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <div style={{background:'rgba(255,255,255,.13)',borderRadius:12,padding:'6px 10px',border:'1px solid rgba(255,255,255,.2)'}}>
+              <p style={{fontSize:10,color:'rgba(255,255,255,.8)',fontWeight:700,display:'flex',alignItems:'center',gap:3}}><BI n="hand-index-thumb-fill" s={9} c="rgba(255,255,255,.75)"/>手渡し（直予約）</p>
+              <p style={{fontSize:12,fontWeight:800,color:'#fff',marginTop:2}}>{tDirect>0?yen(tDirect):'−'}</p>
+            </div>
+            <div style={{background:'rgba(255,255,255,.13)',borderRadius:12,padding:'6px 10px',border:'1px solid rgba(255,255,255,.2)'}}>
+              <p style={{fontSize:10,color:'rgba(255,255,255,.8)',fontWeight:700,display:'flex',alignItems:'center',gap:3}}><BI n="bank2" s={9} c="rgba(255,255,255,.75)"/>振り込み（その他）</p>
+              <p style={{fontSize:12,fontWeight:800,color:'#fff',marginTop:2}}>{tOther>0?yen(tOther):'−'}</p>
+            </div>
+          </div>
+        )}
+        <div style={{marginTop:10}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'rgba(255,255,255,.7)',marginBottom:4}}>
+            <span style={{display:'flex',alignItems:'center',gap:3}}><BI n="flag-fill" s={10} c="rgba(255,255,255,.7)"/>目標達成率</span>
+            <span>{yen(goal)}</span>
+          </div>
+          <div style={{height:6,borderRadius:99,background:'rgba(255,255,255,.2)',overflow:'hidden'}}><div style={{height:'100%',borderRadius:99,background:'#fff',width:`${pct}%`,transition:'width .4s'}}/></div>
+        </div>
+      </div>
+
+      <Cal bookings={bookings} selDate={sel} onDay={d=>setSel(p=>p===d?null:d)} vY={vY} vM={vM} onPrev={prev} onNext={next}/>
+
+      {/* 媒体別予約件数 */}
+      {!sel&&(()=>{
+        const byPlat={};
+        bookings.filter(b=>b.date.startsWith(ms)).forEach(b=>{
+          if(!byPlat[b.platform])byPlat[b.platform]={cnt:0,hrs:0};
+          byPlat[b.platform].cnt++;
+          byPlat[b.platform].hrs+=Number(b.hours)||0;
+        });
+        const entries=Object.entries(byPlat).sort((a,b)=>b[1].cnt-a[1].cnt);
+        if(!entries.length)return null;
+        return(
+          <div style={{margin:'10px 16px 0',background:C.white,borderRadius:18,padding:'12px 14px',border:`1px solid ${C.border}`}}>
+            <p style={{fontSize:11,fontWeight:700,color:C.sub,marginBottom:8,display:'flex',alignItems:'center',gap:4}}>
+              <BI n="grid" s={11} c={C.sub}/>{vM+1}月 媒体別内訳
+            </p>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {entries.map(([key,d])=>{const p=PF[key];return(
+                <div key={key} style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:12,fontWeight:700,padding:'3px 10px',borderRadius:99,background:p.bg,color:p.color,minWidth:0,flexShrink:0}}>{p.label}</span>
+                  <div style={{flex:1,height:6,borderRadius:99,background:C.bg,overflow:'hidden'}}>
+                    <div style={{height:'100%',borderRadius:99,background:p.color,width:`${Math.round(d.cnt/cnt*100)}%`,transition:'width .4s'}}/>
+                  </div>
+                  <span style={{fontSize:12,fontWeight:700,color:C.text,whiteSpace:'nowrap'}}>{d.cnt}件</span>
+                  <span style={{fontSize:11,fontWeight:600,color:C.sub,whiteSpace:'nowrap'}}>{d.hrs}h</span>
+                </div>
+              );})}
+            </div>
+          </div>
+        );
+      })()}
+
+      <div style={{padding:'14px 16px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <h2 style={{fontSize:15,fontWeight:900,color:C.text,letterSpacing:'0.2px'}}>{sel?`${fmtDate(sel)} の予約`:`${vM+1}月の予約`}</h2>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          {sel&&<button onClick={()=>setSel(null)} style={{fontSize:10,fontWeight:700,background:'#FFF0F0',color:C.coral,border:'none',borderRadius:99,padding:'4px 12px',cursor:'pointer'}}>全て表示</button>}
+          <span style={{fontSize:10,fontWeight:600,background:C.border,color:C.sub,padding:'4px 12px',borderRadius:99}}>{filtered.length}件</span>
+        </div>
+      </div>
+      <div style={{padding:'8px 16px 0'}}>
+        {error&&<Err msg="データ取得に失敗しました" onRetry={onRefresh}/>}
+        {loading&&!bookings.length?<Spin/>:filtered.map(b=><BCard key={b.id} b={b} onClick={()=>onTap(b)}/>)}
+        {!loading&&!error&&filtered.length===0&&<div style={{background:C.white,borderRadius:16,padding:24,textAlign:'center'}}><BI n="calendar-x" s={28} c={C.sub}/><p style={{fontSize:13,color:C.sub,marginTop:8}}>予約はありません</p></div>}
+      </div>
+      <div style={{padding:'12px 16px 0'}}>
+        <button onClick={()=>onAdd(sel)} style={{width:'100%',background:C.text,color:'#fff',border:'none',borderRadius:99,padding:'14px 0',fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+          <BI n="plus-lg" s={16} c="#fff"/> 予約を追加する
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── 詳細
+function Detail({b,onBack,onDelete,deleting,onEdit}){
+  const pal=PAL[b.pi??0];const c=useMemo(()=>calcB(b,getCF(b)),[b]);const p=PF[b.platform];
+  const [confirmDelete,setConfirmDelete]=useState(false);
+  const rows=[
+    [b.taxIncluded?'プラン料金（税込）':'プラン料金（税抜）',yen(c.base),null],
+    ...(c.disc>0?[[`お得意様割 ${c.dr}%OFF`,'−'+yen(c.disc),'#0F6E56']]:[]),
+    ...(c.mf>0?[['維持管理費',yen(c.mf),null]]:[]),
+    ...(b.option?[['オプション（税抜）',(b.option>=0?'+':'')+yen(b.option),null]]:[]),
+    ...(b.discountAmt>0?[['割引','−'+yen(b.discountAmt),'#0F6E56']]:[]),
+    ...(!b.taxIncluded?[['消費税 10%',yen(c.tax),null]]:[]),
+    ...(c.ub?[['サイト手数料 2.98%','−'+yen(c.ub.sf),C.coral],['決済手数料 3.5%+¥99','−'+yen(c.ub.pf2),C.coral]]:[
+      [`手数料 ${c.fr}%`,'−'+yen(c.fee),C.coral]]),
+    ['純売上',yen(c.net),C.teal],
+  ];
+  return(
+    <div style={{paddingBottom:32}} className="header-safe">
+      {/* 削除確認モーダル */}
+      {confirmDelete&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'flex-end',justifyContent:'center',zIndex:100,padding:'0 0 24px'}}>
+          <div style={{background:C.white,borderRadius:24,padding:24,width:'100%',maxWidth:430,margin:'0 16px'}}>
+            <p style={{fontSize:16,fontWeight:800,color:C.text,marginBottom:6}}>この予約を削除しますか？</p>
+            <p style={{fontSize:13,color:C.sub,marginBottom:20}}>{b.name} · {b.date} の予約を削除します。この操作は取り消せません。</p>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setConfirmDelete(false)} style={{flex:1,background:C.bg,color:C.text,border:'none',borderRadius:99,padding:'13px 0',fontSize:14,fontWeight:700,cursor:'pointer'}}>
+                キャンセル
+              </button>
+              <button onClick={()=>{setConfirmDelete(false);onDelete(b.id);}} disabled={deleting}
+                style={{flex:1,background:C.coral,color:'#fff',border:'none',borderRadius:99,padding:'13px 0',fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                <BI n="trash-fill" s={14} c="#fff"/> 削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{padding:'16px 16px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <button onClick={onBack} style={{width:38,height:38,borderRadius:'50%',background:C.white,border:`1.5px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><BI n="chevron-left" s={20} c={C.text}/></button>
+        <button onClick={()=>onEdit&&onEdit(b)} style={{display:'flex',alignItems:'center',gap:5,fontSize:12,fontWeight:700,background:C.bg,color:C.text,border:'none',borderRadius:99,padding:'8px 16px',cursor:'pointer'}}>
+          <BI n="pencil" s={13} c={C.text}/> 編集
+        </button>
+      </div>
+      <div style={{margin:'12px 16px 0',background:pal.bg,borderRadius:24,padding:16}}>
+        <div style={{display:'flex',gap:12,alignItems:'center'}}>
+          <div style={{width:48,height:48,borderRadius:16,background:p.bg,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:13,fontWeight:800,color:p.color}}>{b.hours}H</span></div>
+          <div><p style={{fontSize:11,color:C.sub}}>{p.label}</p><p style={{fontSize:18,fontWeight:800,color:C.text}}>{b.name}</p></div>
+        </div>
+        <p style={{fontSize:32,fontWeight:900,color:C.text,margin:'12px 0 0',letterSpacing:'-0.5px'}}>{yen(c.net)}</p>
+        <p style={{fontSize:11,color:C.sub,marginTop:3}}>純売上（手数料控除後）</p>
+        <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}}>
+          {[[fmtDate(b.date),'利用日'],[`${b.hours}時間`,'予約時間'],[`${c.fr}%`,'手数料率']].map(([v,l])=>(
+            <div key={l} style={{background:C.white,borderRadius:12,padding:'8px 10px'}}><p style={{fontSize:12,fontWeight:700,color:C.text}}>{v}</p><p style={{fontSize:10,color:C.sub,marginTop:2}}>{l}</p></div>
+          ))}
+        </div>
+      </div>
+      <div style={{margin:'12px 16px 0'}}>
+        <p style={{fontSize:14,fontWeight:800,color:C.text,marginBottom:8,display:'flex',alignItems:'center',gap:6}}><BI n="wallet2" s={15} c={C.text}/> 料金内訳</p>
+        <div style={{background:C.white,borderRadius:20,overflow:'hidden'}}>
+          {rows.map(([l,v,col],i,a)=>(
+            <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'11px 14px',borderBottom:i<a.length-1?`1px solid ${C.bg}`:'none',background:i===a.length-1?'#F0FBF9':C.white}}>
+              <span style={{fontSize:12,color:C.sub}}>{l}</span><span style={{fontSize:13,fontWeight:700,color:col??C.text}}>{v}</span>
+            </div>
+          ))}
+        </div>
+        {c.ub&&<div style={{marginTop:6,padding:'8px 12px',borderRadius:99,background:'#FAEEDA',display:'flex',gap:6,alignItems:'center'}}><BI n="exclamation-circle-fill" s={13} c="#854F0B"/><p style={{fontSize:11,color:'#854F0B'}}>振込手数料¥250は月1回別途引かれます</p></div>}
+      </div>
+      {/* 削除ボタン（下部） */}
+      <div style={{padding:'20px 16px 0'}}>
+        <button onClick={()=>setConfirmDelete(true)} disabled={deleting}
+          style={{width:'100%',background:'#FFF0F0',color:C.coral,border:'none',borderRadius:99,padding:'13px 0',fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,opacity:deleting?.6:1}}>
+          <BI n={deleting?'hourglass-split':'trash-fill'} s={15} c={C.coral}/>
+          {deleting?'削除中…':'この予約を削除する'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── 追加フォーム
+function Add({onCancel,onSave,saving,initialDate,initialData,platformPrices,isEdit}){
+  const td=initialDate||new Date().toISOString().slice(0,10);
+  const [f,setF]=useState(initialData?{
+    name:initialData.name||'',date:initialData.date||td,
+    startTime:initialData.startTime||'10:00',endTime:initialData.endTime||'13:00',
+    platform:initialData.platform||'space',plan:initialData.plan||'basic',
+    option:String(initialData.option||0),customFee:initialData.customFee!=null?String(initialData.customFee):'',
+    customPrice:initialData.customPrice?String(initialData.customPrice):'',dr:String(initialData.discountRate||0),
+    promo:initialData.promoLink||false,taxIncluded:initialData.taxIncluded||false,discountAmt:String(initialData.discountAmt||''),
+  }:{name:'',date:td,startTime:'10:00',endTime:'13:00',platform:'space',plan:'basic',option:'0',customFee:'',customPrice:'',dr:'0',promo:false,taxIncluded:false,discountAmt:''});
+  // 編集時：保存済みのラベルがあればそれを使用、なければオプション金額から逆算（古いデータ用フォールバック）
+  const [selOpts,setSelOpts]=useState(()=>{
+    if(initialData?.optionLabels&&Array.isArray(initialData.optionLabels)&&initialData.optionLabels.length>0){
+      // 現在のOPTSに存在するラベルだけ採用（OPTSが変わった場合の安全対策）
+      return initialData.optionLabels.filter(l=>OPTS.some(o=>o.label===l));
+    }
+    const target=+(initialData?.option)||0;
+    if(!target)return [];
+    const n=OPTS.length;
+    for(let mask=1;mask<(1<<n);mask++){
+      let sum=0;const labels=[];
+      for(let i=0;i<n;i++)if(mask&(1<<i)){sum+=OPTS[i].price;labels.push(OPTS[i].label);}
+      if(sum===target)return labels;
+    }
+    return [];
+  });
+  const toggleOpt=label=>{const next=selOpts.includes(label)?selOpts.filter(x=>x!==label):[...selOpts,label];setSelOpts(next);u('option',String(next.reduce((s,l)=>{const o=OPTS.find(x=>x.label===l);return s+(o?o.price:0);},0)));};
+  const u=(k,v)=>setF(p=>({...p,[k]:v}));
+  const hours=useMemo(()=>{const[sh,sm]=f.startTime.split(':').map(Number);const[eh,em]=f.endTime.split(':').map(Number);const d=(eh*60+em)-(sh*60+sm);return d>0?d/60:0;},[f.startTime,f.endTime]);
+  const c=useMemo(()=>{
+    const pp=platformPrices?.[f.platform]||{};
+    // 該当プランだけpphを上書き（グローバルPLは触らない）
+    let plForCalc=PL[f.plan]||PL.basic;
+    if(pp[f.plan]&&f.plan!=='custom'){
+      const newPph=pp[f.plan];
+      plForCalc={...plForCalc,pph:newPph,...(plForCalc.hrs?{fp:newPph*plForCalc.hrs}:{})};
+    }
+    const customP=f.plan==='custom'&&f.customPrice?+String(f.customPrice).replace(/,/g,''):0;
+    const b={...f,hours:hours||1,option:+f.option||0,discountRate:+f.dr||0,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,customPrice:customP};
+    const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;
+    return calcB(b,cf,plForCalc);
+  },[f,hours,platformPrices]);
+  const ok=f.name.trim()&&f.date&&hours>0&&!saving;
+  const save=()=>{if(!ok)return;const cf=f.platform==='space'&&f.promo?5:f.platform==='kashi'&&f.promo?0:f.platform==='other'&&f.customFee?+f.customFee:null;onSave({name:f.name,date:f.date,hours,startTime:f.startTime,endTime:f.endTime,platform:f.platform,plan:f.plan,option:+f.option||0,optionLabels:selOpts.length>0?selOpts:null,discountRate:+f.dr||0,discountAmt:+String(f.discountAmt||'').replace(/,/g,'')||0,promoLink:f.promo,taxIncluded:(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded,customPrice:f.plan==='custom'?+String(f.customPrice||'').replace(/,/g,''):0,...(cf!==null?{customFee:cf}:{})});}
+  const previewRows=[
+    [(f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded?'プラン料金（税込）':'プラン料金（税抜）',yen(c.base)],
+    ...(c.disc>0?[[`お得意様割 ${c.dr}%OFF`,'−'+yen(c.disc)]]:[]),
+    ...(c.mf>0?[['維持管理費','+'+yen(c.mf)]]:[]),
+    ...(+f.option>0?[['オプション（税抜）','+'+yen(+f.option)]]:[]),
+    ...(+String(f.discountAmt||'').replace(/,/g,'')>0?[['割引','−'+yen(+String(f.discountAmt||'').replace(/,/g,''))]]:[]),
+    ...(!((f.platform==='direct'||f.platform==='upnow')&&f.taxIncluded)?[['消費税 10%','+'+yen(c.tax)]]:[]),
+    ...(c.ub?[['サイト 2.98%','−'+yen(c.ub.sf)],['決済 3.5%+¥99','−'+yen(c.ub.pf2)]]:[[`手数料 ${c.fr}%`,'−'+yen(c.fee)]]),
+    ['純売上',yen(c.net)],
+  ];
+  const times=[];for(let h=0;h<24;h++)for(let m=0;m<60;m+=30)times.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+  const ss={flex:1,fontSize:15,fontWeight:700,background:C.bg,border:'none',borderRadius:99,padding:'10px 14px',color:C.text,outline:'none'};
+  return(
+    <div style={{paddingBottom:32}} className="header-safe">
+      <div style={{padding:'16px 16px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <button onClick={onCancel} disabled={saving} style={{width:38,height:38,borderRadius:'50%',background:C.white,border:`1.5px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><BI n="x-lg" s={16} c={C.text}/></button>
+        <h1 style={{fontSize:15,fontWeight:800,color:C.text,letterSpacing:'0.3px'}}>{isEdit?'予約を編集':'予約を追加'}</h1>
+        <button disabled={!ok} onClick={save} style={{width:38,height:38,borderRadius:'50%',background:ok?C.text:'#ccc',border:'none',display:'flex',alignItems:'center',justifyContent:'center',cursor:ok?'pointer':'default'}}>
+          <BI n={saving?'hourglass-split':'check-lg'} s={16} c="#fff" st={saving?{animation:'spin 1s linear infinite'}:{}}/>
+        </button>
+      </div>
+      <div style={{padding:'12px 16px 0',display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{background:C.white,borderRadius:20,padding:14}}>
+          <Lbl icon="person">お名前</Lbl>
+          <input value={f.name} onChange={e=>u('name',e.target.value)} placeholder="例：山田 花子" style={{width:'100%',fontSize:16,fontWeight:700,background:'transparent',border:'none',outline:'none',color:C.text,padding:'2px 0'}}/>
+        </div>
+        <div style={{background:C.white,borderRadius:20,padding:14}}>
+          <Lbl icon="calendar3">利用日</Lbl>
+          <input type="date" value={f.date} onChange={e=>u('date',e.target.value)} style={{width:'100%',fontSize:14,fontWeight:700,background:'transparent',border:'none',outline:'none',color:C.text,marginBottom:12}}/>
+          <Lbl icon="clock">利用時間</Lbl>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
+            <select value={f.startTime} onChange={e=>u('startTime',e.target.value)} style={ss}>{times.map(t=><option key={t} value={t}>{t}</option>)}</select>
+            <span style={{fontSize:14,color:C.sub,fontWeight:800}}>〜</span>
+            <select value={f.endTime} onChange={e=>u('endTime',e.target.value)} style={ss}>{times.map(t=><option key={t} value={t}>{t}</option>)}</select>
+            <div style={{background:hours>0?C.teal:'#ccc',borderRadius:99,padding:'8px 14px',textAlign:'center',minWidth:52}}>
+              <p style={{fontSize:15,fontWeight:900,color:'#fff',lineHeight:1}}>{hours>0?hours:'−'}</p>
+              <p style={{fontSize:9,color:'rgba(255,255,255,.8)'}}>H</p>
+            </div>
+          </div>
+          {hours<=0&&f.startTime&&f.endTime&&<p style={{fontSize:10,color:C.coral,marginTop:6}}>終了は開始より後にしてください</p>}
+        </div>
+        <div style={{background:C.white,borderRadius:20,padding:14}}>
+          <Lbl icon="grid">予約媒体</Lbl>
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:4}}>
+            {Object.entries(PF).map(([key,pl])=>(
+              <button key={key} onClick={()=>{u('platform',key);u('promo',false);u('dr','0');u('taxIncluded',false);}} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderRadius:99,border:'none',cursor:'pointer',background:f.platform===key?pl.bg:C.bg}}>
+                <span style={{fontSize:13,fontWeight:700,color:f.platform===key?C.text:C.sub}}>{pl.label}</span>
+                <span style={{display:'flex',alignItems:'center',gap:2,fontSize:10,fontWeight:700,color:pl.color,background:'rgba(255,255,255,.7)',padding:'3px 10px',borderRadius:99}}><BI n="percent" s={9}/>{pl.cx?'2.98%+3.5%':pl.fee+'%'}</span>
+              </button>
+            ))}
+          </div>
+          {f.platform==='other'&&(
+            <div style={{marginTop:8,padding:'10px 14px',borderRadius:99,background:C.bg}}>
+              <Lbl icon="percent">手数料率（%）</Lbl>
+              <input type="number" value={f.customFee} onChange={e=>u('customFee',e.target.value)} placeholder="0" style={{fontSize:18,fontWeight:700,background:'transparent',border:'none',outline:'none',color:C.text,width:'100%'}}/>
+            </div>
+          )}
+          {(f.platform==='direct'||f.platform==='upnow')&&(
+            <div style={{marginTop:8,padding:'10px 14px',borderRadius:16,background:f.platform==='upnow'?'#FAEEDA':'#F5F0FF'}}>
+              <Lbl icon="arrow-left-right">入力金額の方式</Lbl>
+              <div style={{display:'flex',gap:6,marginTop:4}}>
+                {[['exclusive','税別で入力'],['inclusive','税込で入力']].map(([val,lbl])=>(
+                  <button key={val} onClick={()=>u('taxIncluded',val==='inclusive')} style={{flex:1,padding:'10px 6px',borderRadius:99,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,
+                    background:((val==='inclusive'&&f.taxIncluded)||(val==='exclusive'&&!f.taxIncluded))?(f.platform==='upnow'?'#F59E0B':'#A78BFA'):C.white,
+                    color:((val==='inclusive'&&f.taxIncluded)||(val==='exclusive'&&!f.taxIncluded))?'#fff':(f.platform==='upnow'?'#854F0B':'#A78BFA'),fontWeight:700}}>{lbl}</button>
+                ))}
+              </div>
+              <p style={{fontSize:10,color:f.platform==='upnow'?'#854F0B':'#7C5CBF',marginTop:6}}>{f.taxIncluded?'入力額がそのまま売上（消費税加算なし）':'入力額に消費税10%を加算'}</p>
+            </div>
+          )}
+          {(f.platform==='space'||f.platform==='kashi')&&(
+            <div style={{marginTop:8,padding:'10px 14px',borderRadius:16,background:f.promo?(f.platform==='kashi'?'#FBEAF0':'#FAEEDA'):C.bg}}>
+              <button onClick={()=>{u('promo',!f.promo);if(f.promo)u('dr','0');}} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',background:'none',border:'none',cursor:'pointer',padding:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <BI n="link-45deg" s={14} c={f.promo?'#854F0B':C.sub}/>
+                  <div style={{textAlign:'left'}}>
+                    <p style={{fontSize:13,fontWeight:700,color:f.promo?'#854F0B':C.text}}>{f.platform==='kashi'?'パートナーリンク':'プロモーションリンク'}</p>
+                    <p style={{fontSize:10,color:f.promo?'#854F0B':C.sub,marginTop:2}}>{f.promo?(f.platform==='kashi'?'手数料0%':'手数料5%＋お得意様割'):f.platform==='kashi'?'ONで手数料0%':'ONで手数料5%'}</p>
+                  </div>
+                </div>
+                <div style={{width:44,height:26,borderRadius:13,position:'relative',background:f.promo?(f.platform==='kashi'?'#D4537E':'#F59E0B'):'#D1EDE9',flexShrink:0}}>
+                  <div style={{position:'absolute',top:3,left:f.promo?18:3,width:20,height:20,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 4px rgba(0,0,0,.15)'}}/>
+                </div>
+              </button>
+              {f.promo&&f.platform==='space'&&(
+                <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid rgba(250,199,117,.4)'}}>
+                  <p style={{fontSize:11,fontWeight:700,color:'#633806',marginBottom:6,display:'flex',alignItems:'center',gap:4}}><BI n="gift" s={12} c="#633806"/> お得意様割引率（プラン料金のみ）</p>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    {[0,5,10,15,20].map(r=>(<button key={r} onClick={()=>u('dr',String(r))} style={{padding:'6px 14px',borderRadius:99,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,background:+f.dr===r?'#854F0B':'rgba(255,255,255,.7)',color:+f.dr===r?'#fff':'#854F0B'}}>{r===0?'なし':r+'%OFF'}</button>))}
+                  </div>
+                  {+f.dr>0&&<p style={{fontSize:10,color:'#633806',marginTop:6}}>割引額 −{yen(c.disc)}</p>}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div style={{background:C.white,borderRadius:20,padding:14}}>
+          <Lbl icon="list-ul">プラン</Lbl>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12,marginTop:4}}>
+            {Object.entries(PL).filter(([k])=>{if(k==='custom')return true;const en=platformPrices?.[f.platform]?.enabled;return en?en[k]!==false:true;}).map(([k,pl])=>(<button key={k} onClick={()=>u('plan',k)} style={{padding:'8px 16px',borderRadius:99,border:'none',cursor:'pointer',fontSize:12,fontWeight:700,background:f.plan===k?C.text:C.bg,color:f.plan===k?'#fff':C.sub}}>{pl.label}</button>))}
+          </div>
+          {f.plan==='custom'&&(
+            <div style={{marginBottom:12,padding:'10px 14px',borderRadius:16,background:C.bg}}>
+              <Lbl icon="coin">カスタム金額（税抜・円）</Lbl>
+              <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+                <input type="text" inputMode="numeric" value={f.customPrice?Number(f.customPrice.replace(/,/g,'')).toLocaleString('ja-JP'):''} 
+                  onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,'');u('customPrice',v);}}
+                  onFocus={e=>{const v=e.target.value.replace(/,/g,'');if(v==='0'||v==='')e.target.value='';}}
+                  placeholder="例：15,000" 
+                  style={{flex:1,fontSize:20,fontWeight:800,background:'transparent',border:'none',outline:'none',color:C.text,padding:'2px 0'}}/>
+                <span style={{fontSize:13,color:C.sub,fontWeight:600}}>円</span>
+              </div>
+            </div>
+          )}
+          <Lbl icon="plus-square">オプション（税抜・複数選択可）</Lbl>
+          <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
+            {OPTS.map(o=>{const on=selOpts.includes(o.label);return(
+              <button key={o.label} onClick={()=>toggleOpt(o.label)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderRadius:99,border:'none',cursor:'pointer',background:on?C.text:C.bg}}>
+                <span style={{fontSize:13,fontWeight:600,color:on?'#fff':C.sub}}>{o.label}</span>
+                <span style={{fontSize:12,fontWeight:700,color:on?C.teal:C.sub,background:on?'rgba(255,255,255,.15)':'rgba(0,0,0,.05)',padding:'3px 10px',borderRadius:99}}>+{yen(o.price)}</span>
+              </button>
+            );})}
+          </div>
+          {selOpts.length>0&&<p style={{fontSize:12,fontWeight:700,color:C.teal,marginTop:8,textAlign:'right'}}>合計 +{yen(+f.option)}</p>}
+          <div style={{marginTop:10,padding:'10px 14px',borderRadius:16,background:'#FFF0F0'}}>
+            <Lbl icon="tag">割引金額（税抜・任意）</Lbl>
+            <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+              <span style={{fontSize:13,color:C.coral,fontWeight:700}}>−¥</span>
+              <input type="text" inputMode="numeric"
+                value={f.discountAmt?Number(String(f.discountAmt).replace(/,/g,'')).toLocaleString('ja-JP'):''}
+                onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,'');u('discountAmt',v);}}
+                onFocus={e=>{if(e.target.value==='0')e.target.value='';}}
+                placeholder="0"
+                style={{flex:1,fontSize:18,fontWeight:800,background:'transparent',border:'none',outline:'none',color:C.coral,padding:'2px 0'}}/>
+            </div>
+            {+String(f.discountAmt||'').replace(/,/g,'')>0&&<p style={{fontSize:10,color:C.coral,marginTop:4}}>この金額を税前に差し引いて計算します</p>}
+          </div>
+        </div>
+        <div style={{background:'#F0FBF9',borderRadius:20,padding:14}}>
+          <Lbl icon="eye">計算プレビュー</Lbl>
+          <div style={{background:C.white,borderRadius:14,overflow:'hidden',marginTop:4}}>
+            {previewRows.map(([l,v],i,a)=>(
+              <div key={l+i} style={{display:'flex',justifyContent:'space-between',padding:'9px 12px',borderBottom:i<a.length-1?`1px solid ${C.bg}`:'none',background:i===a.length-1?'#E8FAF6':C.white}}>
+                <span style={{fontSize:11,color:C.sub}}>{l}</span>
+                <span style={{fontSize:12,fontWeight:700,color:i===a.length-1?C.teal:l.includes('手数料')||l.includes('決済')||l.includes('サイト')?C.coral:l.includes('割')?'#0F6E56':C.text}}>{v}</span>
+              </div>
+            ))}
+          </div>
+          {c.ub&&<div style={{marginTop:6,padding:'6px 12px',borderRadius:99,background:'#FAEEDA',display:'flex',gap:5,alignItems:'center'}}><BI n="exclamation-circle-fill" s={12} c="#854F0B"/><p style={{fontSize:10,color:'#854F0B'}}>振込手数料¥250は月1回別途</p></div>}
+        </div>
+        <button disabled={!ok} onClick={save} style={{width:'100%',background:ok?C.teal:'#ccc',color:'#fff',border:'none',borderRadius:99,padding:'16px 0',fontSize:16,fontWeight:800,cursor:ok?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+          <BI n={saving?'hourglass-split':'check-circle-fill'} s={18} c="#fff" st={saving?{animation:'spin 1s linear infinite'}:{}}/>
+          {saving?'保存中…':ok?(isEdit?'この内容で更新する':'この内容で登録する'):'名前・時間を入力してください'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── 統計
+function Stats({bookings}){
+  const {bp,bm,tn,tf}=useMemo(()=>{
+    const bp={},bmMap={};let tn=0,tf=0;
+    // 直近6ヶ月を生成
+    const today=new Date();
+    const months=[];
+    for(let i=11;i>=0;i--){
+      const d=new Date(today.getFullYear(),today.getMonth()-i,1);
+      const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      months.push(key);
+      bmMap[key]={m:key,net:0};
+    }
+    bookings.forEach(b=>{
+      const c=calcB(b,getCF(b));tn+=c.net;tf+=c.fee;
+      if(!bp[b.platform])bp[b.platform]={net:0,fee:0,cnt:0};
+      bp[b.platform].net+=c.net;bp[b.platform].fee+=c.fee;bp[b.platform].cnt++;
+      const m=b.date.slice(0,7);
+      if(bmMap[m])bmMap[m].net+=c.net;
+    });
+    return{bp,bm:months.map(k=>bmMap[k]),tn,tf};
+  },[bookings]);
+  const max=Math.max(...bm.map(x=>x.net),1);
+  return(
+    <div style={{paddingBottom:24}} className="header-safe">
+      <div style={{padding:'16px 16px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div><p style={{fontSize:11,color:C.sub,display:'flex',alignItems:'center',gap:3}}><BI n="bar-chart-line" s={11} c={C.sub}/>Statistics</p><h1 style={{fontSize:18,fontWeight:900,color:C.text,letterSpacing:0.5}}>統計</h1></div>
+        <LogoMark size={36} radius={12}/>
+      </div>
+      <div style={{margin:'12px 16px 0',display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        {[['総純売上',yen(tn),C.teal],['総手数料',yen(tf),C.coral]].map(([l,v,col])=>(<div key={l} style={{background:C.white,border:`1.5px solid ${C.border}`,borderRadius:16,padding:'12px 14px'}}><p style={{fontSize:11,color:C.sub}}>{l}</p><p style={{fontSize:16,fontWeight:800,color:col,marginTop:4}}>{v}</p></div>))}
+      </div>
+      {bm.length>0&&(
+        <div style={{margin:'12px 16px 0',background:C.white,borderRadius:20,padding:14}}>
+          <p style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:10,display:'flex',alignItems:'center',gap:5}}><BI n="arrow-up-right" s={14} c={C.text}/> 月別売上</p>
+          <div style={{display:'flex',alignItems:'flex-end',gap:5,height:90}}>
+            {bm.map(x=>(<div key={x.m} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}><div style={{width:'100%',background:C.teal,borderRadius:'5px 5px 0 0',height:`${Math.max(4,Math.round(x.net/max*70))}px`}}/><p style={{fontSize:9,color:C.sub}}>{x.m.slice(5)}月</p></div>))}
+          </div>
+        </div>
+      )}
+      <div style={{margin:'12px 16px 0'}}>
+        <p style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:8,display:'flex',alignItems:'center',gap:5}}><BI n="grid" s={14} c={C.text}/> 媒体別内訳</p>
+        {Object.entries(bp).sort(([,a],[,b])=>b.net-a.net).map(([key,d])=>{const pl=PF[key];return(<div key={key} style={{background:pl.bg,borderRadius:16,padding:'12px 14px',display:'flex',alignItems:'center',gap:10,marginBottom:8}}><div style={{flex:1}}><p style={{fontSize:13,fontWeight:700,color:C.text}}>{pl.label}</p><p style={{fontSize:10,color:C.sub,marginTop:2}}>{d.cnt}件</p></div><div style={{textAlign:'right'}}><p style={{fontSize:14,fontWeight:800,color:pl.color}}>{yen(d.net)}</p><p style={{fontSize:10,color:C.coral}}>手数料−{yen(d.fee)}</p></div></div>);})}
+        {Object.keys(bp).length===0&&<div style={{background:C.white,borderRadius:16,padding:24,textAlign:'center'}}><BI n="bar-chart" s={28} c={C.sub}/><p style={{fontSize:13,color:C.sub,marginTop:8}}>データがありません</p></div>}
+        {Object.keys(bp).length>0&&<div style={{marginTop:10,background:'#EEF2FF',borderRadius:16,padding:'12px 14px',display:'flex',gap:8,alignItems:'flex-start'}}><BI n="info-circle-fill" s={14} c="#4338CA" st={{flexShrink:0,marginTop:1}}/><p style={{fontSize:12,fontWeight:700,color:'#4338CA',lineHeight:1.6}}>直予約を増やすと手数料ゼロで売上がそのまま手元に残ります！</p></div>}
+      </div>
+    </div>
+  );
+}
+
+// ── 設定
+function Setting({goal,setGoalLocal,onSaveGoal,savingGoal,platformPrices,onSavePrices,onReplay}){
+  const [rawGoal,setRawGoal]=React.useState(goal.toLocaleString('ja-JP'));
+  const [editPrices,setEditPrices]=React.useState(()=>JSON.parse(JSON.stringify(platformPrices||{})));
+  const [savingPrices,setSavingPrices]=React.useState(false);
+  const [openPlat,setOpenPlat]=React.useState(null);
+  const updatePrice=(plat,plan,val)=>{setEditPrices(p=>({...p,[plat]:{...p[plat],[plan]:+val||0}}));};
+  const toggleEnabled=(plat,plan)=>{setEditPrices(p=>{const cur=p[plat]?.enabled?.[plan]!==false;return{...p,[plat]:{...p[plat],enabled:{...(p[plat]?.enabled||{}),[plan]:!cur}}};});};
+  const isEnabled=(plat,plan)=>editPrices[plat]?.enabled?.[plan]!==false;
+  const handleSavePrices=async()=>{setSavingPrices(true);await onSavePrices(editPrices);setSavingPrices(false);};
+  React.useEffect(()=>{setRawGoal(goal.toLocaleString('ja-JP'));},[goal]);
+  // platformPricesがSupabase取得後に更新された場合に編集中の値も同期する
+  React.useEffect(()=>{setEditPrices(JSON.parse(JSON.stringify(platformPrices||{})));},[platformPrices]);
+  const onGoalChange=e=>{
+    const digits=e.target.value.replace(/[^0-9]/g,'');
+    setRawGoal(digits?Number(digits).toLocaleString('ja-JP'):'');
+    setGoalLocal(digits?Number(digits):0);
+  };
+  return(
+    <div style={{paddingBottom:24}} className="header-safe">
+      <div style={{padding:'16px 16px 0',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div><p style={{fontSize:11,color:C.sub,display:'flex',alignItems:'center',gap:3}}><BI n="gear" s={11} c={C.sub}/>Settings</p><h1 style={{fontSize:18,fontWeight:900,color:C.text,letterSpacing:0.5}}>設定</h1></div>
+        <LogoMark size={36} radius={12}/>
+      </div>
+      <div style={{padding:'12px 16px 0',display:'flex',flexDirection:'column',gap:12}}>
+        <div style={{background:C.white,borderRadius:18,padding:14}}>
+          <Lbl icon="flag">月の売上目標</Lbl>
+          <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:4}}>
+            <input type="text" inputMode="numeric" value={rawGoal} onChange={onGoalChange} placeholder="250,000" style={{flex:1,minWidth:0,fontSize:24,fontWeight:800,background:'transparent',border:'none',outline:'none',color:C.text}}/>
+            <span style={{fontSize:14,fontWeight:700,color:C.sub,flexShrink:0}}>円</span>
+          </div>
+          <p style={{fontSize:13,fontWeight:700,color:C.teal,marginBottom:12}}>{goal.toLocaleString('ja-JP')} 円</p>
+          <button onClick={onSaveGoal} disabled={savingGoal} style={{width:'100%',background:C.teal,color:'#fff',border:'none',borderRadius:99,padding:'11px 0',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+            <BI n={savingGoal?'hourglass-split':'check-circle-fill'} s={14} c="#fff"/>{savingGoal?'保存中…':'目標を保存する'}
+          </button>
+        </div>
+        <div>
+          <p style={{fontSize:10,fontWeight:700,color:C.sub,marginBottom:6,display:'flex',alignItems:'center',gap:4}}><BI n="sliders" s={11} c={C.sub}/> 媒体別プラン単価</p>
+          <div style={{background:C.white,borderRadius:18,overflow:'hidden',marginBottom:16}}>
+            {Object.entries(PF).filter(([k])=>k!=='other').map(([key,pf],i,a)=>(
+              <div key={key}>
+                <button onClick={()=>setOpenPlat(openPlat===key?null:key)}
+                  style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'13px 14px',background:'none',border:'none',cursor:'pointer',borderBottom:openPlat!==key&&i<a.length-1?`1px solid ${C.bg}`:'none'}}>
+                  <span style={{fontSize:13,fontWeight:700,color:C.text}}>{pf.label}</span>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{fontSize:11,color:C.sub}}>基本 ¥{(editPrices[key]?.basic||0).toLocaleString()}/h</span>
+                    <BI n={openPlat===key?'chevron-up':'chevron-down'} s={13} c={C.sub}/>
+                  </div>
+                </button>
+                {openPlat===key&&(
+                  <div style={{background:C.bg,padding:'12px 14px 14px',borderBottom:i<a.length-1?`1px solid ${C.border}`:'none'}}>
+                    {[['basic','基本プラン','1'],['3h','3時間プラン','3'],['6h','6時間プラン','6'],['9h','9時間プラン','9'],['12h','12時間プラン','12']].map(([plan,lbl,hrs])=>{
+                      const on=isEnabled(key,plan);
+                      return(
+                      <div key={plan} style={{marginBottom:10,opacity:on?1:.45}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                          <p style={{fontSize:10,fontWeight:700,color:C.sub}}>{lbl}</p>
+                          <button onClick={()=>toggleEnabled(key,plan)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',padding:0}}>
+                            <span style={{fontSize:10,fontWeight:700,color:on?C.teal:C.sub}}>{on?'使用中':'未使用'}</span>
+                            <div style={{width:36,height:20,borderRadius:10,position:'relative',background:on?C.teal:'#D1EDE9',flexShrink:0,transition:'background .2s'}}>
+                              <div style={{position:'absolute',top:3,left:on?17:3,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
+                            </div>
+                          </button>
+                        </div>
+                        <div style={{display:'flex',alignItems:'center',background:C.white,borderRadius:99,padding:'8px 14px',gap:4}}>
+                          <span style={{fontSize:13,color:C.sub}}>¥</span>
+                          <input type="text" inputMode="numeric" value={editPrices[key]?.[plan]||''} disabled={!on}
+                            onChange={e=>{const v=e.target.value.replace(/[^0-9]/g,'').replace(/^0+([1-9])/,'$1').replace(/^0+$/,'0');updatePrice(key,plan,v===''?0:+v);}}
+                            onFocus={e=>{if(e.target.value==='0')e.target.value='';}}
+                            style={{flex:1,fontSize:16,fontWeight:700,background:'transparent',border:'none',outline:'none',color:C.text}}/>
+                          <span style={{fontSize:12,color:C.sub,fontWeight:600}}>/h</span>
+                        </div>
+                        {hrs!=='1'&&on&&editPrices[key]?.[plan]>0&&(
+                          <p style={{fontSize:11,color:C.teal,fontWeight:700,marginTop:4,textAlign:'right'}}>
+                            合計 ¥{(editPrices[key][plan]*+hrs).toLocaleString('ja-JP')}
+                          </p>
+                        )}
+                      </div>
+                    );})}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <button onClick={handleSavePrices} disabled={savingPrices}
+            style={{width:'100%',background:C.teal,color:'#fff',border:'none',borderRadius:99,padding:'11px 0',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginBottom:16}}>
+            <BI n={savingPrices?'hourglass-split':'check-circle-fill'} s={14} c="#fff"/>{savingPrices?'保存中…':'単価を保存する'}
+          </button>
+        </div>
+        <div>
+          <p style={{fontSize:10,fontWeight:700,color:C.sub,marginBottom:6,display:'flex',alignItems:'center',gap:4}}><BI n="receipt" s={11} c={C.sub}/> 媒体手数料一覧</p>
+          <div style={{background:C.white,borderRadius:18,overflow:'hidden'}}>
+            {Object.entries(PF).map(([k,p],i,a)=>(<div key={k} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px',borderBottom:i<a.length-1?`1px solid ${C.bg}`:'none'}}><span style={{fontSize:13,fontWeight:600,color:C.text}}>{p.label}</span><span style={{fontSize:11,fontWeight:700,color:p.color,background:p.bg,padding:'3px 10px',borderRadius:99}}>{p.cx?'2.98%+3.5%':p.fee+'%'}</span></div>))}
+          </div>
+        </div>
+        <div style={{background:'rgba(45,212,191,.08)',borderRadius:16,padding:'10px 14px',display:'flex',gap:8,alignItems:'center'}}>
+          <BI n="cloud-check" s={16} c={C.teal}/>
+          <p style={{fontSize:12,color:C.teal,fontWeight:700}}>Supabase でデータを同期中。スマホ・PCどちらから入力しても即座に反映されます。</p>
+        </div>
+        <div style={{background:C.white,borderRadius:18,overflow:'hidden'}}>
+          <button onClick={onReplay} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 14px',background:'#F5F3FF',border:'none',cursor:'pointer'}}>
+            <span style={{fontSize:13,fontWeight:700,color:'#6C63FF',display:'flex',alignItems:'center',gap:6}}><BI n="journal-bookmark-fill" s={14} c="#6C63FF"/> チュートリアルを見る</span>
+            <BI n="chevron-right" s={14} c={C.sub}/>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── オンボーディング
+const OB=[
+  {bg:'linear-gradient(135deg,#0D2B28,#1A4A44)',ac:'#2DD4BF',pill:'STEP 1',title:'予約をまとめて管理',desc:'各掲載サイトの予約を一か所で管理。'},
+  {bg:'linear-gradient(135deg,#1a1040,#2D1F4E)',ac:'#A78BFA',pill:'STEP 2',title:'手数料も自動計算',desc:'スペマ・インスタベ・up now・カシカシ、各手数料に対応。'},
+  {bg:'linear-gradient(135deg,#1a1a2e,#0D2B28)',ac:'#FF6B6B',pill:'STEP 3',title:'スマホ・PCで同期',desc:'Supabaseでデータを管理。どこからでもリアルタイムで確認できます。'},
+];
+const OB_ICONS=['clipboard-check-fill','cash-stack','cloud-check-fill'];
+
+// ── メインApp
+function App(){
+  const [phase,setPhase]=useState('splash');
+  const [books,setBooks]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState(null);
+  const [tab,setTab]=useState('home');
+  const [sub,setSub]=useState(null);
+  const [sel,setSel]=useState(null);
+  const [goal,setGoalLocal]=useState(250000);
+  const [savingGoal,setSavingGoal]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [deleting,setDeleting]=useState(false);
+  const [editTarget,setEditTarget]=useState(null);
+  const _today=new Date();
+  const [homeVY,setHomeVY]=useState(_today.getFullYear());
+  const [homeVM,setHomeVM]=useState(_today.getMonth());
+  const [oIdx,setOIdx]=useState(0);
+  const [addDate,setAddDate]=useState(null);
+  const [onboarded]=useState(()=>!!localStorage.getItem('sb_onboarded'));
+  const [platformPrices,setPlatformPrices]=useState(()=>{
+    try{const v=localStorage.getItem('sb_platform_prices');return v?JSON.parse(v):JSON.parse(JSON.stringify(DEFAULT_PRICES));}
+    catch{return JSON.parse(JSON.stringify(DEFAULT_PRICES));}
+  });
+  const savePlatformPrices=async(prices)=>{
+    setPlatformPrices(prices);
+    localStorage.setItem('sb_platform_prices',JSON.stringify(prices));
+    try{
+      const{error:e}=await sb.from('settings').upsert({key:'platform_prices',value:JSON.stringify(prices)},{onConflict:'key'});
+      if(e)throw e;
+    }catch(e){alert('クラウドへの保存に失敗しました。端末には保存済みです。\n'+e.message);}
+  };
+
+  // データ取得
+  const fetchBooks=useCallback(async()=>{
+    setLoading(true);setError(null);
+    try{
+      const{data,error:e}=await sb.from('bookings').select('*').order('date',{ascending:false});
+      if(e)throw e;
+      setBooks((data||[]).map(fromRow));
+    }catch(e){setError(e.message);}
+    finally{setLoading(false);}
+  },[]);
+
+  const fetchGoal=useCallback(async()=>{
+    try{
+      const{data}=await sb.from('settings').select('value').eq('key','goal').maybeSingle();
+      if(data?.value)setGoalLocal(+data.value);
+    }catch{}
+    try{
+      const{data}=await sb.from('settings').select('value').eq('key','platform_prices').maybeSingle();
+      if(data?.value){const pp=JSON.parse(data.value);setPlatformPrices(pp);localStorage.setItem('sb_platform_prices',JSON.stringify(pp));}
+    }catch{}
+  },[]);
+
+  // 初期化
+  useEffect(()=>{
+    const t=setTimeout(()=>{
+      setPhase(onboarded?'app':'onboarding');
+      if(onboarded){fetchBooks();fetchGoal();}
+    },1600);
+    return()=>clearTimeout(t);
+  },[]);
+
+  // 保存
+  const handleSave=async(b)=>{
+    setSaving(true);
+    try{
+      const row={...toRow(b),id:String(Date.now()),pi:books.length%PAL.length};
+      const{error:e}=await sb.from('bookings').insert([row]);
+      if(e)throw e;
+      await fetchBooks();
+      setSub(null);
+      // 保存した予約の月をホーム表示月に
+      if(b.date){const[yy,mm]=b.date.split('-');setHomeVY(+yy);setHomeVM(+mm-1);}
+    }catch(e){alert('保存に失敗しました: '+e.message);}
+    finally{setSaving(false);}
+  };
+
+  // 削除
+  const handleDelete=async(id)=>{
+    setDeleting(true);
+    try{
+      const{error:e}=await sb.from('bookings').delete().eq('id',id);
+      if(e)throw e;
+      await fetchBooks();
+      setSub(null);
+    }catch(e){alert('削除に失敗しました: '+e.message);}
+    finally{setDeleting(false);}
+  };
+
+  // 更新
+  const handleUpdate=async(updated)=>{
+    setSaving(true);
+    try{
+      const row={...updated,id:sel.id,pi:sel.pi||0,hours:updated.hours||sel.hours};
+      const{error:e}=await sb.from('bookings').update({
+        name:row.name,date:row.date,start_time:row.startTime,end_time:row.endTime,
+        hours:row.hours,platform:row.platform,plan:row.plan,
+        option_amount:row.option||0,option_labels:(row.optionLabels&&row.optionLabels.length>0)?row.optionLabels:null,discount_rate:row.discountRate||0,...(row.discountAmt>0?{discount_amount:row.discountAmt}:{}),custom_price:row.customPrice||0,
+        promo_link:row.promoLink||false,tax_included:row.taxIncluded||false,
+        custom_fee:row.customFee??null,
+      }).eq('id',sel.id);
+      if(e)throw e;
+      const refreshed=await sb.from('bookings').select('*').eq('id',sel.id).single();
+      if(refreshed.data)setSel(fromRow(refreshed.data));
+      await fetchBooks();
+      setSub('detail');
+      setEditTarget(null);
+    }catch(e){alert('更新に失敗しました: '+e.message);}
+    finally{setSaving(false);}
+  };
+
+  // 目標保存
+  const handleSaveGoal=async()=>{
+    setSavingGoal(true);
+    try{
+      const{error:e}=await sb.from('settings').upsert({key:'goal',value:String(goal)},{onConflict:'key'});
+      if(e)throw e;
+    }catch(e){alert('保存に失敗しました: '+e.message);}
+    finally{setSavingGoal(false);}
+  };
+
+  const finishOnboarding=()=>{
+    localStorage.setItem('sb_onboarded','1');
+    setPhase('app');
+    fetchBooks();fetchGoal();
+  };
+
+  const s=OB[oIdx];
+  const NB=({icon,iconActive,label,active,onClick})=>(
+    <button onClick={onClick} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,background:'none',border:'none',cursor:'pointer',padding:'2px 6px'}}>
+      <div style={{width:44,height:44,display:'flex',alignItems:'center',justifyContent:'center',background:active?C.text:'transparent',borderRadius:16,transition:'background .2s'}}>
+        <BI n={active?(iconActive||icon):icon} s={22} c={active?'#fff':C.sub}/>
+      </div>
+      <span style={{fontSize:10,fontWeight:600,color:active?C.text:C.sub}}>{label}</span>
+    </button>
+  );
+
+  return(
+    <div className="app">
+      {phase==='splash'&&(
+        <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'#0D2B28',gap:20,paddingTop:'env(safe-area-inset-top,44px)'}}>
+          <div style={{position:'absolute',top:'15%',left:'10%',width:200,height:200,borderRadius:'50%',background:'radial-gradient(circle,rgba(45,212,191,.3),transparent 70%)',filter:'blur(40px)',pointerEvents:'none'}}/>
+          <div style={{width:90,height:90,borderRadius:'50%',background:'linear-gradient(135deg,#2DD4BF,#0F6E56)',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 16px 48px rgba(45,212,191,.5)'}}><BI n="building-fill" s={44} c="#fff"/></div>
+          <div style={{textAlign:'center'}}>
+            <p style={{fontSize:38,fontWeight:900,letterSpacing:'1px',lineHeight:1}}>
+              <span style={{color:'#fff'}}>Space</span><span style={{background:'linear-gradient(90deg,#2DD4BF,#A78BFA)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>Book</span>
+            </p>
+            <p style={{fontSize:11,color:'rgba(255,255,255,.35)',marginTop:10,letterSpacing:'4px'}}>SPACE MANAGEMENT</p>
+          </div>
+        </div>
+      )}
+
+      {phase==='onboarding'&&(
+        <div style={{flex:1,display:'flex',flexDirection:'column',background:s.bg,position:'relative',paddingTop:'env(safe-area-inset-top,44px)'}}>
+          {oIdx<2&&(<button onClick={finishOnboarding} style={{position:'absolute',top:'calc(env(safe-area-inset-top,44px) + 12px)',right:16,background:'rgba(255,255,255,.12)',border:'none',borderRadius:99,padding:'6px 16px',fontSize:12,color:'rgba(255,255,255,.7)',cursor:'pointer',zIndex:10}}>スキップ</button>)}
+          <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:'60px 24px 0',textAlign:'center'}}>
+            <div>
+              <div style={{display:'flex',justifyContent:'center',marginBottom:24}}><BI n={OB_ICONS[oIdx]} s={64} c="rgba(255,255,255,.85)"/></div>
+              <p style={{fontSize:28,fontWeight:900,color:'#fff',lineHeight:1.2,marginBottom:10}}>{s.title}</p>
+              <p style={{fontSize:14,color:'rgba(255,255,255,.6)',lineHeight:1.8}}>{s.desc}</p>
+            </div>
+          </div>
+          <div style={{padding:'0 28px calc(env(safe-area-inset-bottom,0px) + 48px)'}}>
+            <div style={{display:'inline-block',background:s.ac,borderRadius:99,padding:'4px 14px',fontSize:10,fontWeight:900,color:'#fff',letterSpacing:'1px',marginBottom:14}}>{s.pill}</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{display:'flex',gap:6}}>{OB.map((_,i)=><div key={i} onClick={()=>setOIdx(i)} style={{height:5,borderRadius:99,cursor:'pointer',width:i===oIdx?24:5,background:i===oIdx?s.ac:'rgba(255,255,255,.25)',transition:'width .3s'}}/>)}</div>
+              <button onClick={()=>oIdx===2?finishOnboarding():setOIdx(i=>i+1)} style={{background:s.ac,border:'none',borderRadius:99,padding:'13px 24px',fontSize:14,fontWeight:800,color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+                {oIdx===2?'はじめる':'次へ'}<BI n="arrow-right" s={16} c="#fff"/>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phase==='app'&&(
+        <>
+          <div className="content">
+            {sub==='detail'&&sel&&<Detail b={sel} onBack={()=>setSub(null)} onDelete={handleDelete} deleting={deleting} onEdit={b=>{setEditTarget(b);setSub('edit');}}/>}
+            {sub==='add'&&<Add onCancel={()=>setSub(null)} initialDate={addDate} onSave={handleSave} saving={saving} platformPrices={platformPrices}/>}
+            {sub==='edit'&&editTarget&&<Add onCancel={()=>{setSub('detail');setEditTarget(null);}} initialDate={editTarget.date} initialData={editTarget} onSave={handleUpdate} saving={saving} platformPrices={platformPrices} isEdit={true}/>}
+            {!sub&&tab==='home'&&<Home bookings={books} loading={loading} error={error} onTap={b=>{setSel(b);setSub('detail');}} onAdd={d=>{setAddDate(d);setSub('add');}} onRefresh={fetchBooks} goal={goal} vY={homeVY} vM={homeVM} setVY={setHomeVY} setVM={setHomeVM}/>}
+            {!sub&&tab==='stats'&&<Stats bookings={books}/>}
+            {!sub&&tab==='set'&&<Setting goal={goal} setGoalLocal={setGoalLocal} onSaveGoal={handleSaveGoal} savingGoal={savingGoal} platformPrices={platformPrices} onSavePrices={savePlatformPrices} onReplay={()=>{localStorage.removeItem('sb_onboarded');setOIdx(0);setPhase('onboarding');}}/>}
+          </div>
+          <div className="navbar" style={{background:C.white,borderTop:`1.5px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-around',padding:'6px 0 0'}}>
+            <NB icon="house" iconActive="house-fill" label="ホーム" active={!sub&&tab==='home'} onClick={()=>{setSub(null);setTab('home');}}/>
+            <NB icon="bar-chart" iconActive="bar-chart-fill" label="統計" active={!sub&&tab==='stats'} onClick={()=>{setSub(null);setTab('stats');}}/>
+            <NB icon="gear" iconActive="gear-fill" label="設定" active={!sub&&tab==='set'} onClick={()=>{setSub(null);setTab('set');}}/>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+<script>if('serviceWorker'in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('./sw.js').catch(()=>{});});}</script>
+</body>
+</html>

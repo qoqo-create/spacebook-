@@ -691,6 +691,8 @@ function Setting({goal,setGoalLocal,onSaveGoal,savingGoal,platformPrices,onSaveP
   const isEnabled=(plat,plan)=>editPrices[plat]?.enabled?.[plan]!==false;
   const handleSavePrices=async()=>{setSavingPrices(true);await onSavePrices(editPrices);setSavingPrices(false);};
   React.useEffect(()=>{setRawGoal(goal.toLocaleString('ja-JP'));},[goal]);
+  // platformPricesがSupabase取得後に更新された場合に編集中の値も同期する
+  React.useEffect(()=>{setEditPrices(JSON.parse(JSON.stringify(platformPrices||{})));},[platformPrices]);
   const onGoalChange=e=>{
     const digits=e.target.value.replace(/[^0-9]/g,'');
     setRawGoal(digits?Number(digits).toLocaleString('ja-JP'):'');
@@ -705,9 +707,9 @@ function Setting({goal,setGoalLocal,onSaveGoal,savingGoal,platformPrices,onSaveP
       <div style={{padding:'12px 16px 0',display:'flex',flexDirection:'column',gap:12}}>
         <div style={{background:C.white,borderRadius:18,padding:14}}>
           <Lbl icon="flag">月の売上目標</Lbl>
-          <div style={{display:'flex',alignItems:'baseline',gap:4,marginBottom:4}}>
-            <input type="text" inputMode="numeric" value={rawGoal} onChange={onGoalChange} placeholder="250,000" style={{flex:1,fontSize:24,fontWeight:800,background:'transparent',border:'none',outline:'none',color:C.text}}/>
-            <span style={{fontSize:14,fontWeight:700,color:C.sub}}>円</span>
+          <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:4}}>
+            <input type="text" inputMode="numeric" value={rawGoal} onChange={onGoalChange} placeholder="250,000" style={{flex:1,minWidth:0,fontSize:24,fontWeight:800,background:'transparent',border:'none',outline:'none',color:C.text}}/>
+            <span style={{fontSize:14,fontWeight:700,color:C.sub,flexShrink:0}}>円</span>
           </div>
           <p style={{fontSize:13,fontWeight:700,color:C.teal,marginBottom:12}}>{goal.toLocaleString('ja-JP')} 円</p>
           <button onClick={onSaveGoal} disabled={savingGoal} style={{width:'100%',background:C.teal,color:'#fff',border:'none',borderRadius:99,padding:'11px 0',fontSize:13,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
@@ -823,7 +825,10 @@ function App(){
   const savePlatformPrices=async(prices)=>{
     setPlatformPrices(prices);
     localStorage.setItem('sb_platform_prices',JSON.stringify(prices));
-    try{await sb.from('settings').upsert({key:'platform_prices',value:JSON.stringify(prices)});}catch{}
+    try{
+      const{error:e}=await sb.from('settings').upsert({key:'platform_prices',value:JSON.stringify(prices)},{onConflict:'key'});
+      if(e)throw e;
+    }catch(e){alert('クラウドへの保存に失敗しました。端末には保存済みです。\n'+e.message);}
   };
 
   // データ取得
@@ -910,7 +915,7 @@ function App(){
   const handleSaveGoal=async()=>{
     setSavingGoal(true);
     try{
-      const{error:e}=await sb.from('settings').upsert({key:'goal',value:String(goal)});
+      const{error:e}=await sb.from('settings').upsert({key:'goal',value:String(goal)},{onConflict:'key'});
       if(e)throw e;
     }catch(e){alert('保存に失敗しました: '+e.message);}
     finally{setSavingGoal(false);}

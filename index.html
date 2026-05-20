@@ -95,12 +95,12 @@ const fromRow=r=>({
 const C={teal:'#2DD4BF',coral:'#FF6B6B',bg:'#F0FBF9',white:'#FFFFFF',text:'#1A2E2B',sub:'#9CA3AF',border:'#D1EDE9'};
 const PAL=[{bg:'#F0FBF9'},{bg:'#FFF0F0'},{bg:'#F5F0FF'},{bg:'#FFFBEA'},{bg:'#F0F8FF'}];
 const PF={
-  space:{label:'スペースマーケット',fee:30,color:'#2DD4BF',bg:'#E1F5EE',mf:300},
-  insta:{label:'インスタベース',fee:35,color:'#60A5FA',bg:'#E6F1FB',mf:0},
-  upnow:{label:'up now',fee:9.3,color:'#F59E0B',bg:'#FAEEDA',mf:0,cx:true},
-  kashi:{label:'カシカシ',fee:25,color:'#D4537E',bg:'#FBEAF0',mf:300},
-  direct:{label:'直予約',fee:0,color:'#A78BFA',bg:'#F5F0FF',mf:0},
-  other:{label:'その他',fee:0,color:'#9CA3AF',bg:'#F1EFE8',mf:0},
+  space:{label:'スペースマーケット',short:'スペマ',fee:30,color:'#2DD4BF',bg:'#E1F5EE',mf:300},
+  insta:{label:'インスタベース',short:'インスタ',fee:35,color:'#60A5FA',bg:'#E6F1FB',mf:0},
+  upnow:{label:'up now',short:'upnow',fee:9.3,color:'#F59E0B',bg:'#FAEEDA',mf:0,cx:true},
+  kashi:{label:'カシカシ',short:'カシカシ',fee:25,color:'#D4537E',bg:'#FBEAF0',mf:300},
+  direct:{label:'直予約',short:'直予約',fee:0,color:'#A78BFA',bg:'#F5F0FF',mf:0},
+  other:{label:'その他',short:'その他',fee:0,color:'#9CA3AF',bg:'#F1EFE8',mf:0},
 };
 const PL={basic:{label:'基本プラン',pph:3400,hrs:null},'3h':{label:'3時間プラン',pph:3200,hrs:3},'6h':{label:'6時間プラン',pph:2800,hrs:6},'9h':{label:'9時間プラン',pph:2800,hrs:9},'12h':{label:'12時間プラン',pph:2800,hrs:12},custom:{label:'カスタム',fp:0,hrs:null}};
 // 媒体別デフォルト単価（設定で上書き可能）
@@ -185,7 +185,7 @@ function Cal({bookings,selDate,onDay,vY,vM,onPrev,onNext}){
           const s=d?ds(d):null;const ents=s?(bmap[s]||[]):[];const sel2=d&&s===selDate;const tod=isT(d);const dow=(fd+(d||1)-1)%7;
           return(<div key={i} onClick={()=>d&&onDay(s)} style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'2px 0',cursor:d?'pointer':'default',borderRadius:8,background:sel2?C.text:'transparent'}}>
             {d&&<span style={{fontSize:12,fontWeight:tod||ents.length?700:400,lineHeight:'24px',width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',color:sel2?'#fff':tod?C.teal:dow===0?'#FF6B6B':dow===6?'#60A5FA':C.text,border:tod&&!sel2?`2px solid ${C.teal}`:'none'}}>{d}</span>}
-            {d&&<div style={{height:5,display:'flex',gap:2,alignItems:'center',justifyContent:'center'}}>{ents.slice(0,3).map((b,j)=><div key={j} style={{width:4,height:4,borderRadius:'50%',background:sel2?'#fff':PF[b.platform]?.color??C.teal}}/>)}</div>}
+            {d&&<div style={{display:'flex',flexDirection:'column',gap:1,alignItems:'center',marginTop:1}}>{ents.slice(0,3).map((b,j)=>{const pf=PF[b.platform]??{};return(<div key={j} style={{display:'flex',alignItems:'center',gap:1}}><div style={{width:4,height:4,borderRadius:'50%',flexShrink:0,background:sel2?'#fff':pf.color??C.teal}}/><span style={{fontSize:6,fontWeight:700,color:sel2?'#fff':pf.color??C.teal,lineHeight:1}}>{pf.short??''}</span></div>);})}</div>}
           </div>);
         })}
       </div>
@@ -242,11 +242,12 @@ function BCard({b,onClick}){
 // ── ホーム
 function Home({bookings,loading,error,onTap,onAdd,onRefresh,goal,vY,vM,setVY,setVM}){
   const [sel,setSel]=useState(null);
+  const [listExpanded,setListExpanded]=useState(false);
   const ms=`${vY}-${String(vM+1).padStart(2,'0')}`;
   const {tn,tf,cnt,totalHrs,tDirect,tOther}=useMemo(()=>{let tn=0,tf=0,cnt=0,totalHrs=0,tDirect=0,tOther=0;bookings.forEach(b=>{if(!b.date.startsWith(ms))return;const c=calcB(b,getCF(b));tn+=c.net;tf+=c.fee;cnt++;totalHrs+=Number(b.hours)||0;if(b.platform==='direct')tDirect+=c.net;else tOther+=c.net;});return{tn,tf,cnt,totalHrs,tDirect,tOther};},[bookings,ms]);
   const pct=Math.min(100,Math.round(tn/goal*100));
-  const prev=()=>{if(vM===0){setVM(11);setVY(y=>y-1);}else setVM(m=>m-1);setSel(null);};
-  const next=()=>{if(vM===11){setVM(0);setVY(y=>y+1);}else setVM(m=>m+1);setSel(null);};
+  const prev=()=>{if(vM===0){setVM(11);setVY(y=>y-1);}else setVM(m=>m-1);setSel(null);setListExpanded(false);};
+  const next=()=>{if(vM===11){setVM(0);setVY(y=>y+1);}else setVM(m=>m+1);setSel(null);setListExpanded(false);};
   const filtered=sel?bookings.filter(b=>b.date===sel):bookings.filter(b=>b.date.startsWith(ms));
   const [pullY,setPullY]=useState(0);
   const startY=React.useRef(0);const threshold=70;
@@ -349,8 +350,21 @@ function Home({bookings,loading,error,onTap,onAdd,onRefresh,goal,vY,vM,setVY,set
       </div>
       <div style={{padding:'8px 16px 0'}}>
         {error&&<Err msg="データ取得に失敗しました" onRetry={onRefresh}/>}
-        {loading&&!bookings.length?<Spin/>:filtered.map(b=><BCard key={b.id} b={b} onClick={()=>onTap(b)}/>)}
-        {!loading&&!error&&filtered.length===0&&<div style={{background:C.white,borderRadius:16,padding:24,textAlign:'center'}}><BI n="calendar-x" s={28} c={C.sub}/><p style={{fontSize:13,color:C.sub,marginTop:8}}>予約はありません</p></div>}
+        {loading&&!bookings.length?<Spin/>:(()=>{
+          const LIMIT=3;
+          const show=listExpanded?filtered:filtered.slice(0,LIMIT);
+          const rest=filtered.length-LIMIT;
+          return(<>
+            {show.map(b=><BCard key={b.id} b={b} onClick={()=>onTap(b)}/>)}
+            {!loading&&!error&&filtered.length===0&&<div style={{background:C.white,borderRadius:16,padding:24,textAlign:'center'}}><BI n="calendar-x" s={28} c={C.sub}/><p style={{fontSize:13,color:C.sub,marginTop:8}}>予約はありません</p></div>}
+            {filtered.length>LIMIT&&(
+              <button onClick={()=>setListExpanded(e=>!e)} style={{width:'100%',background:C.white,border:`1.5px solid ${C.border}`,borderRadius:14,padding:'10px',fontSize:12,fontWeight:700,color:C.sub,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginBottom:10}}>
+                <BI n={listExpanded?'chevron-up':'chevron-down'} s={12} c={C.sub}/>
+                {listExpanded?'折りたたむ':`残り${rest}件を表示`}
+              </button>
+            )}
+          </>);
+        })()}
       </div>
       <div style={{padding:'12px 16px 0'}}>
         <button onClick={()=>onAdd(sel)} style={{width:'100%',background:C.text,color:'#fff',border:'none',borderRadius:99,padding:'14px 0',fontSize:14,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>

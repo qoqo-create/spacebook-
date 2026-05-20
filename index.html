@@ -243,7 +243,7 @@ function BCard({b,onClick}){
 function Home({bookings,loading,error,onTap,onAdd,onRefresh,goal,vY,vM,setVY,setVM}){
   const [sel,setSel]=useState(null);
   const ms=`${vY}-${String(vM+1).padStart(2,'0')}`;
-  const {tn,tf,cnt,totalHrs,tDirect,tOther}=useMemo(()=>{let tn=0,tf=0,cnt=0,totalHrs=0,tDirect=0,tOther=0;bookings.forEach(b=>{if(!b.date.startsWith(ms))return;const c=calcB(b,getCF(b));tn+=c.net;tf+=c.fee;cnt++;totalHrs+=Number(b.hours)||0;if(b.platform==='direct')tDirect+=c.net;if(b.platform==='other')tOther+=c.net;});return{tn,tf,cnt,totalHrs,tDirect,tOther};},[bookings,ms]);
+  const {tn,tf,cnt,totalHrs,tDirect,tOther}=useMemo(()=>{let tn=0,tf=0,cnt=0,totalHrs=0,tDirect=0,tOther=0;bookings.forEach(b=>{if(!b.date.startsWith(ms))return;const c=calcB(b,getCF(b));tn+=c.net;tf+=c.fee;cnt++;totalHrs+=Number(b.hours)||0;if(b.platform==='direct')tDirect+=c.net;else tOther+=c.net;});return{tn,tf,cnt,totalHrs,tDirect,tOther};},[bookings,ms]);
   const pct=Math.min(100,Math.round(tn/goal*100));
   const prev=()=>{if(vM===0){setVM(11);setVY(y=>y-1);}else setVM(m=>m-1);setSel(null);};
   const next=()=>{if(vM===11){setVM(0);setVY(y=>y+1);}else setVM(m=>m+1);setSel(null);};
@@ -286,14 +286,14 @@ function Home({bookings,loading,error,onTap,onAdd,onRefresh,goal,vY,vM,setVY,set
             </div>
           ))}
         </div>
-        {(tDirect>0||tOther>0)&&(
+        {cnt>0&&(
           <div style={{marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             <div style={{background:'rgba(255,255,255,.13)',borderRadius:12,padding:'6px 10px',border:'1px solid rgba(255,255,255,.2)'}}>
               <p style={{fontSize:10,color:'rgba(255,255,255,.8)',fontWeight:700,display:'flex',alignItems:'center',gap:3}}><BI n="hand-index-thumb-fill" s={9} c="rgba(255,255,255,.75)"/>手渡し（直予約）</p>
               <p style={{fontSize:12,fontWeight:800,color:'#fff',marginTop:2}}>{tDirect>0?yen(tDirect):'−'}</p>
             </div>
             <div style={{background:'rgba(255,255,255,.13)',borderRadius:12,padding:'6px 10px',border:'1px solid rgba(255,255,255,.2)'}}>
-              <p style={{fontSize:10,color:'rgba(255,255,255,.8)',fontWeight:700,display:'flex',alignItems:'center',gap:3}}><BI n="bank2" s={9} c="rgba(255,255,255,.75)"/>振り込み（その他）</p>
+              <p style={{fontSize:10,color:'rgba(255,255,255,.8)',fontWeight:700,display:'flex',alignItems:'center',gap:3}}><BI n="bank2" s={9} c="rgba(255,255,255,.75)"/>振り込み</p>
               <p style={{fontSize:12,fontWeight:800,color:'#fff',marginTop:2}}>{tOther>0?yen(tOther):'−'}</p>
             </div>
           </div>
